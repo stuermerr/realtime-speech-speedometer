@@ -24,6 +24,7 @@ frontend/dist/
 # Generated spike and analysis artifacts
 backend/spikes/.artifacts/
 docs/graphify-out/cache/
+/graphify-out/
 
 # Local scratch files
 .scratch/

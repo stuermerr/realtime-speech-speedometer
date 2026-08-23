@@ -65,3 +65,10 @@ so the flat `app` and `spikes` imports will not resolve reliably.
 Start with [the project brief](docs/00_PROJECT_BRIEF.md), then read
 [the architecture decisions](docs/01_ARCHITECTURE_DECISIONS.md). Provider spike
 evidence is recorded in the remaining documents under `docs/`.
+
+## Contributing
+
+GitHub Issues is the source of truth for planned work, decisions attached to
+work, and progress. Start with an existing issue or create one using the
+repository's bug, feature, or implementation-task form. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the issue-to-pull-request workflow.
