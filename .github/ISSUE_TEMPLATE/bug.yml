@@ -1,0 +1,39 @@
+name: Bug report
+description: Report reproducible behavior that should be corrected
+title: "[Bug]: "
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Speech Speedometer.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What happened, and what impact did it have?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Provide the smallest reliable sequence that reproduces the problem.
+      placeholder: |
+        1. Start a session
+        2. ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and evidence
+      description: Include browser, operating system, logs, or screenshots. Remove credentials and personal data.
