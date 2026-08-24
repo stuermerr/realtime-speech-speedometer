@@ -26,24 +26,24 @@ def test_captured_word_timing_preserves_active_speech_wpm_behavior() -> None:
     ]
     meter = ActiveSpeechWpm()
 
-    before_long_pause = meter.add_words(words[:24])
-    after_long_pause = meter.add_words(words[24:32])
-    rolled_window = meter.add_words(words[32:])
+    before_long_pause = meter.calculate(words[:24])
+    after_long_pause = meter.calculate(words[:32])
+    rolled_window = meter.calculate(words)
 
     assert before_long_pause.word_count == 24
-    assert before_long_pause.active_seconds == pytest.approx(8.31)
+    assert before_long_pause.active_speech_seconds == pytest.approx(8.31)
     assert before_long_pause.wpm == pytest.approx(173.2851985559567)
     assert before_long_pause.audio_start_seconds == 0.16
     assert before_long_pause.audio_end_seconds == 8.47
 
     assert after_long_pause.word_count == 32
-    assert after_long_pause.active_seconds == pytest.approx(10.47)
+    assert after_long_pause.active_speech_seconds == pytest.approx(10.47)
     assert after_long_pause.wpm == pytest.approx(183.3810888252149)
     assert after_long_pause.audio_start_seconds == 0.16
     assert after_long_pause.audio_end_seconds == 15.5
 
     assert rolled_window.word_count == 36
-    assert rolled_window.active_seconds == pytest.approx(10.8)
+    assert rolled_window.active_speech_seconds == pytest.approx(10.8)
     assert rolled_window.wpm == pytest.approx(200.0)
     assert rolled_window.audio_start_seconds == 4.15
     assert rolled_window.audio_end_seconds == 20.84

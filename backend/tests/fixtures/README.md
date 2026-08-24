@@ -22,3 +22,11 @@ fixture with the default 1-second pause threshold:
   three active intervals are 4.32, 2.16, and 4.32 seconds; the 4.87- and
   1.02-second gaps are excluded. That gives 36 words, 10.80 active seconds,
   and `36 × 60 ÷ 10.80 = 200` WPM over audio bounds 4.15–20.84 seconds.
+
+`deepgram_realtime_results.json` is a smaller sanitized sequence derived from
+the same local capture's event shapes. It preserves only the fields required
+by the application parser and demonstrates interim growth, text and timestamp
+revision, a dropped interim word, an empty Results event, and finalization.
+Names were replaced and confidence, request metadata, and other provider-only
+fields were removed. Tests use the sequence as replaceable hypotheses; they do
+not append it into a transcript or contact Deepgram.
