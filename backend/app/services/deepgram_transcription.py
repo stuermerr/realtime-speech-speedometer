@@ -6,6 +6,7 @@ import json
 import math
 from collections.abc import AsyncIterator, Awaitable, Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Literal, Protocol, Self, TypeVar, cast
 from urllib.parse import urlencode
@@ -22,7 +23,7 @@ from pydantic import (
     model_validator,
 )
 from websockets.asyncio.client import connect
-from websockets.exceptions import ConnectionClosed, InvalidStatus
+from websockets.exceptions import ConnectionClosedOK, InvalidStatus
 
 from app.core.config import DeepgramSettings
 from app.services.wpm import RecognizedWord
@@ -51,6 +52,13 @@ DEEPGRAM_QUERY_PARAMETERS: Mapping[str, str] = MappingProxyType(
         "utterance_end_ms": str(DEEPGRAM_UTTERANCE_END_MILLISECONDS),
     }
 )
+
+
+class DeepgramAudioMode(StrEnum):
+    """Audio framing modes supported by the direct Deepgram transport."""
+
+    LINEAR16_24KHZ_MONO = "linear16-24khz-mono"
+    WEBM_OPUS = "webm-opus"
 
 
 class DeepgramError(RuntimeError):
@@ -160,9 +168,11 @@ class DeepgramTranscriptionSession:
         self,
         settings: DeepgramSettings,
         *,
+        audio_mode: DeepgramAudioMode = DeepgramAudioMode.LINEAR16_24KHZ_MONO,
         connector: DeepgramConnector | None = None,
     ) -> None:
         self._settings = settings
+        self._audio_mode = audio_mode
         self._connector = connector
         self._connection: DeepgramConnection | None = None
 
@@ -179,7 +189,11 @@ class DeepgramTranscriptionSession:
         await self.close()
 
     async def open(self) -> None:
-        parameters = urlencode(DEEPGRAM_QUERY_PARAMETERS)
+        query_parameters = dict(DEEPGRAM_QUERY_PARAMETERS)
+        if self._audio_mode is DeepgramAudioMode.WEBM_OPUS:
+            for raw_parameter in ("encoding", "sample_rate", "channels"):
+                del query_parameters[raw_parameter]
+        parameters = urlencode(query_parameters)
         url = f"{DEEPGRAM_WEBSOCKET_URL}?{parameters}"
         headers = {"Authorization": f"Token {self._settings.api_key}"}
         try:
@@ -245,7 +259,7 @@ class DeepgramTranscriptionSession:
                 yield MappingProxyType(typed_payload)
         except DeepgramError:
             raise
-        except ConnectionClosed:
+        except ConnectionClosedOK:
             return
         except Exception:
             stream_failed = True

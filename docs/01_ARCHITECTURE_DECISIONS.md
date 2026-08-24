@@ -775,6 +775,102 @@ invalid call cannot affect a later valid measurement.
 
 ---
 
+## ADR-019 — Browser Audio Uses Containerized WebM/Opus Passthrough
+
+### Status
+
+**Accepted**
+
+### Decision
+
+Current desktop Chrome/Chromium records microphone audio as
+`audio/webm;codecs=opus` and sends each non-empty `MediaRecorder` Blob as one
+ordered binary browser WebSocket message. FastAPI forwards those bytes directly
+to one Deepgram Nova-3 `/v1/listen` connection without transcoding.
+
+The browser transport uses a distinct containerized-audio mode. Its Deepgram
+query omits `encoding`, `sample_rate`, and `channels`, allowing the provider to
+read framing from the WebM container. The historical fixed-sample spike keeps
+its explicit raw `linear16`, 24 kHz, mono mode unchanged.
+
+`MediaRecorder.start(250)` requests approximately 250 ms chunks. This value is
+a transport cadence, not a speech clock; WPM continues to use provider word
+timestamps.
+
+### Evidence
+
+- Deepgram documents that `encoding` is required for raw headerless packets and
+  must not be used for containerized audio.
+- Deepgram's v1 streaming API accepts binary media and a JSON `CloseStream`
+  command.
+- Current Chrome/Chromium exposes WebM/Opus through `MediaRecorder`; support is
+  checked before microphone access.
+
+See:
+
+- https://developers.deepgram.com/docs/encoding
+- https://developers.deepgram.com/reference/speech-to-text/listen-streaming
+- https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder/isTypeSupported_static
+
+### Consequences
+
+- No browser or backend resampling, decoding, or transcoding is introduced.
+- Audio continues through speech and silence until explicit Stop.
+- Direct passthrough must be validated with a real microphone and Deepgram.
+- If it fails, diagnose and record the failure before considering PCM,
+  AudioWorklet, resampling, or transcoding in a new decision.
+
+### Interview explanation
+
+> Chrome already produces a supported streaming container. Passing it through
+> unchanged removes an unnecessary media pipeline while Deepgram remains the
+> owner of speech timestamps.
+
+---
+
+## ADR-020 — Vanilla Browser Adapter for Local Tracer-Bullet Validation
+
+### Status
+
+**Accepted, temporary adapter**
+
+### Decision
+
+Serve a small HTML/CSS/JavaScript debug client from FastAPI at
+`http://localhost:8000/`. Do not initialize the planned React/TypeScript
+frontend during the browser-to-WPM tracer bullet.
+
+The adapter owns only browser capabilities and resources:
+
+- capability checks and microphone permission;
+- `MediaRecorder` lifecycle and ordered binary chunk sending;
+- Start/Stop controls and debug session states;
+- rendering backend measurements, stopped notifications, and safe errors.
+
+FastAPI continues to own the Deepgram connection, credentials, transcription
+orchestration, word state, and deterministic WPM pipeline.
+
+### Why
+
+The current milestone tests the media and session-lifecycle architecture, not
+the polished product interface. A framework would add build tooling and UI
+structure without improving that evidence.
+
+### Consequences
+
+- There is no repository-root or frontend Node project for this milestone.
+- The adapter is not the final large-display pace-color or summary UI.
+- A later product-UI issue may replace it without changing the WebSocket
+  session protocol or WebM/Opus transport.
+
+### Interview explanation
+
+> I isolated the risky end-to-end media path with the smallest browser adapter.
+> That proves the durable transport and backend lifecycle before investing in
+> the polished interface.
+
+---
+
 # Open Decisions
 
 ## OD-006 — Yellow Pace Band
