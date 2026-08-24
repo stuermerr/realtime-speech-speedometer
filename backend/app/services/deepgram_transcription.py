@@ -7,9 +7,20 @@ import math
 from collections.abc import AsyncIterator, Awaitable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Protocol, Self, TypeGuard, cast
+from typing import Any, Literal, Protocol, Self, TypeVar, cast
 from urllib.parse import urlencode
 
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    ValidationError,
+    model_validator,
+)
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
@@ -20,6 +31,7 @@ from app.services.wpm import RecognizedWord
 DEEPGRAM_WEBSOCKET_URL = "wss://api.deepgram.com/v1/listen"
 DEEPGRAM_MODEL = "nova-3"
 DEEPGRAM_LANGUAGE = "de"
+DEEPGRAM_ENCODING = "linear16"
 DEEPGRAM_SAMPLE_RATE = 24_000
 DEEPGRAM_CHANNELS = 1
 DEEPGRAM_ENDPOINTING_MILLISECONDS = 600
@@ -28,7 +40,7 @@ DEEPGRAM_QUERY_PARAMETERS: Mapping[str, str] = MappingProxyType(
     {
         "model": DEEPGRAM_MODEL,
         "language": DEEPGRAM_LANGUAGE,
-        "encoding": "linear16",
+        "encoding": DEEPGRAM_ENCODING,
         "sample_rate": str(DEEPGRAM_SAMPLE_RATE),
         "channels": str(DEEPGRAM_CHANNELS),
         "interim_results": "true",
@@ -63,6 +75,64 @@ class ParsedDeepgramResult:
 
     is_final: bool
     words: tuple[RecognizedWord, ...]
+
+
+class _DeepgramEventEnvelope(BaseModel):
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    type: StrictStr
+
+
+class _DeepgramChannelEnvelope(BaseModel):
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    alternatives: tuple[Any, ...] = Field(min_length=1)
+
+
+class _DeepgramResultsEnvelope(BaseModel):
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    type: Literal["Results"]
+    is_final: StrictBool
+    channel: _DeepgramChannelEnvelope
+
+
+class _DeepgramWordPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    word: StrictStr
+    start: StrictInt | StrictFloat
+    end: StrictInt | StrictFloat
+
+    @model_validator(mode="after")
+    def validate_word(self) -> Self:
+        if (
+            not self.word.strip()
+            or not math.isfinite(self.start)
+            or not math.isfinite(self.end)
+            or self.start < 0
+            or self.end <= self.start
+        ):
+            raise ValueError("invalid timed word")
+        return self
+
+
+class _DeepgramAlternativePayload(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    transcript: StrictStr
+    words: tuple[_DeepgramWordPayload, ...]
+
+    @model_validator(mode="after")
+    def validate_hypothesis(self) -> Self:
+        if bool(self.transcript.strip()) != bool(self.words):
+            raise ValueError("inconsistent transcript and words")
+        if any(
+            current.start < previous.start
+            for previous, current in zip(self.words, self.words[1:])
+        ):
+            raise ValueError("words are not chronological")
+        return self
 
 
 class DeepgramConnection(Protocol):
@@ -123,31 +193,32 @@ class DeepgramTranscriptionSession:
                 connection = await self._connector(
                     url, additional_headers=headers
                 )
-            self._connection = connection
         except Exception as error:
-            raise DeepgramConnectionError(_safe_connection_error(error)) from error
+            safe_error = _safe_connection_error(error)
+        else:
+            self._connection = connection
+            return
+        raise DeepgramConnectionError(safe_error)
 
     async def send_audio(self, audio: bytes) -> None:
+        connection = self._require_connection()
         try:
-            await self._require_connection().send(audio)
-        except DeepgramError:
-            raise
-        except Exception as error:
-            raise DeepgramConnectionError(
-                "Could not send audio to Deepgram"
-            ) from error
+            await connection.send(audio)
+        except Exception:
+            pass
+        else:
+            return
+        raise DeepgramConnectionError("Could not send audio to Deepgram")
 
     async def close_stream(self) -> None:
+        connection = self._require_connection()
         try:
-            await self._require_connection().send(
-                json.dumps({"type": "CloseStream"})
-            )
-        except DeepgramError:
-            raise
-        except Exception as error:
-            raise DeepgramConnectionError(
-                "Could not close the Deepgram audio stream"
-            ) from error
+            await connection.send(json.dumps({"type": "CloseStream"}))
+        except Exception:
+            pass
+        else:
+            return
+        raise DeepgramConnectionError("Could not close the Deepgram audio stream")
 
     async def events(self) -> AsyncIterator[ParsedDeepgramResult]:
         async for payload in self.provider_events():
@@ -158,37 +229,28 @@ class DeepgramTranscriptionSession:
     async def provider_events(self) -> AsyncIterator[Mapping[str, object]]:
         """Receive validated provider events for spike observation tooling."""
         connection = self._require_connection()
+        stream_failed = False
         try:
             async for message in connection:
-                try:
-                    payload = json.loads(message)
-                except (json.JSONDecodeError, UnicodeDecodeError) as error:
-                    raise DeepgramProtocolError(
-                        "Deepgram sent malformed JSON"
-                    ) from error
-                if not isinstance(payload, dict):
-                    raise DeepgramProtocolError(
-                        "Deepgram sent an event without a valid object"
-                    )
-                typed_payload = cast(dict[str, object], payload)
-                event_type = typed_payload.get("type")
-                if not isinstance(event_type, str):
-                    raise DeepgramProtocolError(
-                        "Deepgram sent an event without a valid type"
-                    )
-                if event_type == "Error":
+                typed_payload = _decode_provider_message(message)
+                envelope = _validate_payload(
+                    _DeepgramEventEnvelope,
+                    typed_payload,
+                    "Deepgram sent an event without a valid type",
+                )
+                if envelope.type == "Error":
                     raise DeepgramServiceError(
                         "Deepgram reported a service error"
                     )
-                yield typed_payload
+                yield MappingProxyType(typed_payload)
         except DeepgramError:
             raise
         except ConnectionClosed:
             return
-        except Exception as error:
-            raise DeepgramConnectionError(
-                "The Deepgram event stream failed"
-            ) from error
+        except Exception:
+            stream_failed = True
+        if stream_failed:
+            raise DeepgramConnectionError("The Deepgram event stream failed")
 
     async def close(self) -> None:
         connection = self._connection
@@ -197,10 +259,11 @@ class DeepgramTranscriptionSession:
             return
         try:
             await connection.close()
-        except Exception as error:
-            raise DeepgramConnectionError(
-                "Could not close the Deepgram connection"
-            ) from error
+        except Exception:
+            pass
+        else:
+            return
+        raise DeepgramConnectionError("Could not close the Deepgram connection")
 
     def _require_connection(self) -> DeepgramConnection:
         if self._connection is None:
@@ -214,69 +277,66 @@ def parse_deepgram_event(
     payload: Mapping[str, object],
 ) -> ParsedDeepgramResult | None:
     """Normalize one Results event; ignore additive non-Results events."""
-    event_type = payload.get("type")
-    if not isinstance(event_type, str):
-        raise DeepgramProtocolError("Deepgram sent an event without a valid type")
-    if event_type == "Error":
+    envelope = _validate_payload(
+        _DeepgramEventEnvelope,
+        payload,
+        "Deepgram sent an event without a valid type",
+    )
+    if envelope.type == "Error":
         raise DeepgramServiceError("Deepgram reported a service error")
-    if event_type != "Results":
+    if envelope.type != "Results":
         return None
 
-    is_final = payload.get("is_final")
-    channel = payload.get("channel")
-    if not isinstance(is_final, bool) or not isinstance(channel, Mapping):
-        raise DeepgramProtocolError("Deepgram sent malformed Results")
-    alternatives = channel.get("alternatives")
-    if not isinstance(alternatives, list) or not alternatives:
-        raise DeepgramProtocolError("Deepgram sent malformed Results")
-    first_alternative = alternatives[0]
-    if not isinstance(first_alternative, Mapping):
-        raise DeepgramProtocolError("Deepgram sent malformed Results")
-    transcript = first_alternative.get("transcript")
-    raw_words = first_alternative.get("words")
-    if not isinstance(transcript, str) or not isinstance(raw_words, list):
-        raise DeepgramProtocolError("Deepgram sent malformed Results")
-    if bool(transcript.strip()) != bool(raw_words):
-        raise DeepgramProtocolError(
-            "Deepgram Results transcript and timed words are inconsistent"
-        )
-
-    words: list[RecognizedWord] = []
-    previous_start: float | None = None
-    for raw_word in raw_words:
-        if not isinstance(raw_word, Mapping):
-            raise DeepgramProtocolError("Deepgram sent malformed timed words")
-        text = raw_word.get("word")
-        start = raw_word.get("start")
-        end = raw_word.get("end")
-        if not (
-            isinstance(text, str)
-            and text.strip()
-            and _is_finite_number(start)
-            and _is_finite_number(end)
-            and start >= 0
-            and end > start
-            and (previous_start is None or start >= previous_start)
-        ):
-            raise DeepgramProtocolError("Deepgram sent malformed timed words")
-        words.append(
-            RecognizedWord(
-                text=text,
-                start_seconds=float(start),
-                end_seconds=float(end),
-            )
-        )
-        previous_start = float(start)
-
-    return ParsedDeepgramResult(is_final=is_final, words=tuple(words))
-
-
-def _is_finite_number(value: object) -> TypeGuard[int | float]:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
+    result = _validate_payload(
+        _DeepgramResultsEnvelope,
+        payload,
+        "Deepgram sent malformed Results",
     )
+    alternative = _validate_payload(
+        _DeepgramAlternativePayload,
+        result.channel.alternatives[0],
+        "Deepgram sent malformed Results",
+    )
+    return ParsedDeepgramResult(
+        is_final=result.is_final,
+        words=tuple(
+            RecognizedWord(
+                text=word.word,
+                start_seconds=float(word.start),
+                end_seconds=float(word.end),
+            )
+            for word in alternative.words
+        )
+    )
+
+
+Model = TypeVar("Model", bound=BaseModel)
+
+
+def _validate_payload(
+    model: type[Model], payload: object, error_message: str
+) -> Model:
+    try:
+        parsed = model.model_validate(payload)
+    except ValidationError:
+        pass
+    else:
+        return parsed
+    raise DeepgramProtocolError(error_message)
+
+
+def _decode_provider_message(message: str | bytes) -> dict[str, object]:
+    try:
+        payload = json.loads(message)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        pass
+    else:
+        if isinstance(payload, dict):
+            return cast(dict[str, object], payload)
+        raise DeepgramProtocolError(
+            "Deepgram sent an event without a valid object"
+        )
+    raise DeepgramProtocolError("Deepgram sent malformed JSON")
 
 
 def _safe_connection_error(error: Exception) -> str:

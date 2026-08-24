@@ -159,6 +159,8 @@ def test_connection_failure_is_typed_and_secret_safe() -> None:
 
     assert "connect" in str(caught.value).lower()
     assert "deepgram-secret" not in str(caught.value)
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
 
 
 def test_sanitized_results_preserve_atomic_interim_revision_and_finalization() -> None:
@@ -240,6 +242,20 @@ def test_sanitized_results_preserve_atomic_interim_revision_and_finalization() -
                 ]
             },
         },
+        {
+            "type": "Results",
+            "is_final": False,
+            "channel": {
+                "alternatives": [
+                    {
+                        "transcript": "spoken",
+                        "words": [
+                            {"word": "spoken", "start": False, "end": 1.2}
+                        ],
+                    }
+                ]
+            },
+        },
     ],
 )
 def test_malformed_results_fail_without_partial_output(
@@ -252,6 +268,31 @@ def test_malformed_results_fail_without_partial_output(
 def test_non_results_events_are_additive_and_nonfatal() -> None:
     assert parse_deepgram_event({"type": "SpeechStarted", "timestamp": 1.2}) is None
     assert parse_deepgram_event({"type": "FutureEvent", "new_field": True}) is None
+
+
+def test_only_the_first_alternative_is_part_of_the_parser_contract() -> None:
+    result = parse_deepgram_event(
+        {
+            "type": "Results",
+            "is_final": False,
+            "channel": {
+                "alternatives": [
+                    {
+                        "transcript": "spoken",
+                        "words": [
+                            {"word": "spoken", "start": 0.0, "end": 0.5}
+                        ],
+                    },
+                    {"provider_future_shape": object()},
+                ]
+            },
+        }
+    )
+
+    assert result == ParsedDeepgramResult(
+        is_final=False,
+        words=(RecognizedWord("spoken", 0.0, 0.5),),
+    )
 
 
 def test_provider_error_event_is_a_service_failure_without_echoing_payload() -> None:

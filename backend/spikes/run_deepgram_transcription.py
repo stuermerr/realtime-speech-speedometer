@@ -14,6 +14,14 @@ from typing import cast
 
 from app.core.config import ConfigurationError, DeepgramSettings
 from app.services.deepgram_transcription import (
+    DEEPGRAM_CHANNELS,
+    DEEPGRAM_ENCODING,
+    DEEPGRAM_ENDPOINTING_MILLISECONDS,
+    DEEPGRAM_LANGUAGE,
+    DEEPGRAM_MODEL,
+    DEEPGRAM_QUERY_PARAMETERS,
+    DEEPGRAM_SAMPLE_RATE,
+    DEEPGRAM_UTTERANCE_END_MILLISECONDS,
     DeepgramError,
     DeepgramTranscriptionSession,
 )
@@ -127,16 +135,21 @@ def write_report(result: DeepgramProbeResult, *, run_id: str) -> Path:
                     "before": current.get("word"),
                 }
             )
+    channel_label = (
+        "mono" if DEEPGRAM_CHANNELS == 1 else f"{DEEPGRAM_CHANNELS} channels"
+    )
     report = {
         "status": result.status,
         "configuration": {
-            "model": "nova-3",
-            "language": "de",
-            "endpointing_ms": 600,
-            "utterance_end_ms": 1000,
-            "vad_events": True,
-            "interim_results": True,
-            "audio": "linear16 mono 24000 Hz",
+            "model": DEEPGRAM_MODEL,
+            "language": DEEPGRAM_LANGUAGE,
+            "endpointing_ms": DEEPGRAM_ENDPOINTING_MILLISECONDS,
+            "utterance_end_ms": DEEPGRAM_UTTERANCE_END_MILLISECONDS,
+            "vad_events": DEEPGRAM_QUERY_PARAMETERS["vad_events"] == "true",
+            "interim_results": (
+                DEEPGRAM_QUERY_PARAMETERS["interim_results"] == "true"
+            ),
+            "audio": f"{DEEPGRAM_ENCODING} {channel_label} {DEEPGRAM_SAMPLE_RATE} Hz",
         },
         "audio_duration_seconds": result.audio_duration_seconds,
         "run_duration_seconds": (
