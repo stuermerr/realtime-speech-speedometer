@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator, Mapping
-from enum import Enum
 from typing import Literal, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -86,10 +85,6 @@ class _ErrorMessage(BaseModel):
     message: str
 
 
-class _BrowserCompletion(Enum):
-    STOP = "stop"
-
-
 class BrowserLiveWpmSession:
     """Relay and measure one browser stream without an internal audio queue."""
 
@@ -108,7 +103,7 @@ class BrowserLiveWpmSession:
         self._pipeline = LiveWpmPipeline()
 
     async def run(self) -> None:
-        browser_task: asyncio.Task[_BrowserCompletion] | None = None
+        browser_task: asyncio.Task[None] | None = None
         provider_task: asyncio.Task[bool] | None = None
         try:
             async with self._provider:
@@ -120,17 +115,23 @@ class BrowserLiveWpmSession:
                 )
 
                 if browser_task in done:
-                    completion = await browser_task
-                    if completion is _BrowserCompletion.STOP:
-                        metadata_seen = await self._drain_provider(provider_task)
-                        if not metadata_seen:
-                            raise BrowserSessionProtocolError(
-                                "Deepgram closed without final Metadata"
-                            )
-                        await self._send(_StoppedMessage())
-                        return
+                    try:
+                        await browser_task
+                    except BaseException:
+                        await _cancel(provider_task)
+                        raise
+                    metadata_seen = await self._drain_provider(provider_task)
+                    if not metadata_seen:
+                        raise BrowserSessionProtocolError(
+                            "Deepgram closed without final Metadata"
+                        )
+                    await self._send(_StoppedMessage())
+                    return
 
-                await provider_task
+                try:
+                    await provider_task
+                finally:
+                    await _cancel(browser_task)
                 raise BrowserSessionProtocolError(
                     "Deepgram closed before the browser stopped"
                 )
@@ -150,7 +151,7 @@ class BrowserLiveWpmSession:
             await _cancel(browser_task)
             await _cancel(provider_task)
 
-    async def _forward_browser(self) -> _BrowserCompletion:
+    async def _forward_browser(self) -> None:
         while True:
             message = await self._browser.receive()
             message_type = message.get("type")
@@ -169,7 +170,7 @@ class BrowserLiveWpmSession:
             if isinstance(text, str) and audio is None:
                 _parse_stop_command(text)
                 await self._provider.close_stream()
-                return _BrowserCompletion.STOP
+                return
             raise BrowserSessionProtocolError("Invalid browser message")
 
     async def _forward_provider(self) -> bool:
