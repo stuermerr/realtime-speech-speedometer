@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator, Mapping
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import ConfigurationError
@@ -72,9 +74,7 @@ def test_live_websocket_owns_a_fresh_provider_for_each_session() -> None:
                         "alternatives": [
                             {
                                 "transcript": "fresh",
-                                "words": [
-                                    {"word": "fresh", "start": 0.0, "end": 0.5}
-                                ],
+                                "words": [{"word": "fresh", "start": 0.0, "end": 0.5}],
                             }
                         ]
                     },
@@ -99,6 +99,22 @@ def test_live_websocket_owns_a_fresh_provider_for_each_session() -> None:
         [b"second-webm"],
     ]
     assert [provider.close_count for provider in providers] == [1, 1]
+
+
+def test_live_wpm_debug_environment_enables_session_records(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("LIVE_WPM_DEBUG", "true")
+    client = TestClient(create_app(provider_factory=EndpointProvider))
+
+    with client.websocket_connect("/ws/live") as websocket:
+        websocket.send_json({"type": "stop"})
+        assert websocket.receive_json() == {"type": "stopped"}
+
+    records = [json.loads(record.message) for record in caplog.records]
+    assert ("session", "started") in {
+        (record["stage"], record["event"]) for record in records
+    }
 
 
 def test_missing_server_configuration_is_reported_without_details() -> None:

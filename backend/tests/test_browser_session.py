@@ -7,7 +7,7 @@ from typing import Any, TypeVar
 
 import pytest
 
-from app.services.browser_session import BrowserLiveWpmSession
+from app.services.browser_session import BrowserLiveWpmSession, LiveWpmDiagnostics
 
 
 Result = TypeVar("Result")
@@ -31,11 +31,7 @@ def provider_result(word_count: int, *, duration: float = 4.0) -> dict[str, obje
     return {
         "type": "Results",
         "is_final": False,
-        "channel": {
-            "alternatives": [
-                {"transcript": " ".join(texts), "words": words}
-            ]
-        },
+        "channel": {"alternatives": [{"transcript": " ".join(texts), "words": words}]},
     }
 
 
@@ -149,9 +145,7 @@ def test_binary_audio_and_stop_drain_to_measurements_then_stopped() -> None:
 
 def test_unavailable_measurement_is_null_and_unchanged_result_is_suppressed() -> None:
     short_result = provider_result(1, duration=0.5)
-    browser = FakeBrowser(
-        [{"type": "websocket.receive", "text": '{"type":"stop"}'}]
-    )
+    browser = FakeBrowser([{"type": "websocket.receive", "text": '{"type":"stop"}'}])
     provider = FakeProvider(
         [short_result, short_result, {"type": "Metadata", "request_id": "safe"}]
     )
@@ -172,9 +166,7 @@ def test_unavailable_measurement_is_null_and_unchanged_result_is_suppressed() ->
 
 
 def test_invalid_control_is_fatal_safe_and_cancels_provider_flow() -> None:
-    browser = FakeBrowser(
-        [{"type": "websocket.receive", "text": '{"type":"unknown"}'}]
-    )
+    browser = FakeBrowser([{"type": "websocket.receive", "text": '{"type":"unknown"}'}])
     provider = FakeProvider([], hang_after_events=True)
 
     run(BrowserLiveWpmSession(browser, provider, drain_timeout_seconds=0.5).run())
@@ -253,9 +245,7 @@ def test_normal_provider_close_before_stop_is_an_error_and_cancels_browser() -> 
 
 
 def test_missing_metadata_after_stop_is_an_error_not_stopped() -> None:
-    browser = FakeBrowser(
-        [{"type": "websocket.receive", "text": '{"type":"stop"}'}]
-    )
+    browser = FakeBrowser([{"type": "websocket.receive", "text": '{"type":"stop"}'}])
     provider = FakeProvider([provider_result(8)])
 
     run(BrowserLiveWpmSession(browser, provider, drain_timeout_seconds=0.5).run())
@@ -269,9 +259,7 @@ def test_missing_metadata_after_stop_is_an_error_not_stopped() -> None:
 
 
 def test_provider_drain_timeout_is_error_and_cleans_up_once() -> None:
-    browser = FakeBrowser(
-        [{"type": "websocket.receive", "text": '{"type":"stop"}'}]
-    )
+    browser = FakeBrowser([{"type": "websocket.receive", "text": '{"type":"stop"}'}])
     provider = FakeProvider(
         [{"type": "Metadata", "request_id": "safe"}],
         hang_after_events=True,
@@ -289,9 +277,198 @@ def test_provider_drain_timeout_is_error_and_cleans_up_once() -> None:
 
 def test_browser_send_failure_cancels_active_provider_and_cleans_up_once() -> None:
     browser = FailingSendBrowser([])
-    provider = FakeProvider([provider_result(8)], wait_for_stop=False, hang_after_events=True)
+    provider = FakeProvider(
+        [provider_result(8)], wait_for_stop=False, hang_after_events=True
+    )
 
     run(BrowserLiveWpmSession(browser, provider, drain_timeout_seconds=0.5).run())
 
     assert browser.cancel_count == 1
     assert provider.close_count == 1
+
+
+def test_live_wpm_diagnostics_emit_nothing_when_disabled() -> None:
+    records: list[str] = []
+    browser = FakeBrowser([{"type": "websocket.receive", "text": '{"type":"stop"}'}])
+    provider = FakeProvider([{"type": "Metadata", "request_id": "safe"}])
+    diagnostics = LiveWpmDiagnostics(enabled=False, sink=records.append)
+
+    run(
+        BrowserLiveWpmSession(
+            browser,
+            provider,
+            diagnostics=diagnostics,
+            drain_timeout_seconds=0.5,
+        ).run()
+    )
+
+    assert records == []
+
+
+def test_live_wpm_diagnostics_cover_normal_pipeline_without_sensitive_content() -> None:
+    canaries = (
+        "audio-canary",
+        "transcript-canary",
+        "word-canary",
+        "authorization-canary",
+        "device-canary",
+    )
+    audio = canaries[0].encode()
+    short_result = {
+        "type": "Results",
+        "is_final": False,
+        "authorization": canaries[3],
+        "channel": {
+            "alternatives": [
+                {
+                    "transcript": canaries[1],
+                    "words": [{"word": canaries[2], "start": 0.0, "end": 0.5}],
+                }
+            ]
+        },
+    }
+    browser = FakeBrowser(
+        [
+            {"type": "websocket.receive", "bytes": audio},
+            {"type": "websocket.receive", "text": '{"type":"stop"}'},
+        ]
+    )
+    provider = FakeProvider(
+        [
+            short_result,
+            short_result,
+            provider_result(8),
+            {
+                "type": "Metadata",
+                "request_id": canaries[4],
+            },
+        ]
+    )
+    output: list[str] = []
+    diagnostics = LiveWpmDiagnostics(
+        enabled=True,
+        sink=output.append,
+        clock=lambda: 100.0,
+        session_id="session-safe",
+    )
+
+    run(
+        BrowserLiveWpmSession(
+            browser,
+            provider,
+            diagnostics=diagnostics,
+            drain_timeout_seconds=0.5,
+        ).run()
+    )
+
+    records = [json.loads(line) for line in output]
+    events = {(record["stage"], record["event"]) for record in records}
+    assert {
+        ("browser", "audio_received"),
+        ("provider", "audio_forwarded"),
+        ("browser", "stop_received"),
+        ("provider", "close_stream_sent"),
+        ("provider", "event_received"),
+        ("pipeline", "timeline_changed"),
+        ("pipeline", "wpm_availability"),
+        ("browser", "measurement_sent"),
+        ("browser", "measurement_suppressed"),
+        ("provider", "stream_closed"),
+        ("browser", "stopped_sent"),
+        ("session", "cleanup_finished"),
+    } <= events
+    assert all(record["session_id"] == "session-safe" for record in records)
+    assert all(record["relative_seconds"] == 0.0 for record in records)
+
+    audio_record = next(
+        record for record in records if record["event"] == "audio_received"
+    )
+    assert audio_record["chunk_index"] == 1
+    assert audio_record["byte_size"] == len(audio)
+
+    result_records = [
+        record
+        for record in records
+        if record["event"] == "event_received"
+        and record["provider_event_type"] == "Results"
+    ]
+    assert (
+        result_records[0]
+        | {
+            "is_final": False,
+            "word_count": 1,
+            "audio_start_seconds": 0.0,
+            "audio_end_seconds": 0.5,
+        }
+        == result_records[0]
+    )
+    assert {
+        record["available"]
+        for record in records
+        if record["event"] == "wpm_availability"
+    } == {False, True}
+    assert {
+        record["changed"] for record in records if record["event"] == "timeline_changed"
+    } == {False, True}
+    assert all(canary not in "\n".join(output) for canary in canaries)
+
+
+def test_live_wpm_diagnostics_categorize_abnormal_provider_close_safely() -> None:
+    canary = "provider-error-canary"
+    browser = BlockingBrowser([])
+    provider = FakeProvider(
+        [{"type": "Error", "description": canary}],
+        wait_for_stop=False,
+    )
+    output: list[str] = []
+
+    run(
+        BrowserLiveWpmSession(
+            browser,
+            provider,
+            diagnostics=LiveWpmDiagnostics(enabled=True, sink=output.append),
+            drain_timeout_seconds=0.5,
+        ).run()
+    )
+
+    records = [json.loads(line) for line in output]
+    assert any(
+        record["stage"] == "provider"
+        and record["event"] == "stream_closed"
+        and record["outcome"] == "abnormal"
+        for record in records
+    )
+    assert any(
+        record["stage"] == "session"
+        and record["event"] == "failed"
+        and record["category"] == "provider"
+        for record in records
+    )
+    assert canary not in "\n".join(output)
+
+
+def test_live_wpm_diagnostics_show_timeout_cancellation_and_cleanup() -> None:
+    browser = FakeBrowser([{"type": "websocket.receive", "text": '{"type":"stop"}'}])
+    provider = FakeProvider(
+        [{"type": "Metadata", "request_id": "safe"}],
+        hang_after_events=True,
+    )
+    output: list[str] = []
+
+    run(
+        BrowserLiveWpmSession(
+            browser,
+            provider,
+            diagnostics=LiveWpmDiagnostics(enabled=True, sink=output.append),
+            drain_timeout_seconds=0.01,
+        ).run()
+    )
+
+    records = [json.loads(line) for line in output]
+    events = {
+        (record["stage"], record["event"], record.get("outcome")) for record in records
+    }
+    assert ("provider", "stream_closed", "cancelled") in events
+    assert ("provider", "drain_timeout", None) in events
+    assert ("session", "cleanup_started", None) in events
+    assert ("session", "cleanup_finished", None) in events

@@ -7,10 +7,15 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.core.config import ConfigurationError, DeepgramSettings
+from app.core.config import (
+    ConfigurationError,
+    DeepgramSettings,
+    LiveWpmDebugSettings,
+)
 from app.services.browser_session import (
     BrowserDeepgramSession,
     BrowserLiveWpmSession,
+    LiveWpmDiagnostics,
 )
 from app.services.deepgram_transcription import (
     DeepgramAudioMode,
@@ -32,6 +37,7 @@ def _browser_provider() -> BrowserDeepgramSession:
 def create_app(*, provider_factory: ProviderFactory | None = None) -> FastAPI:
     application = FastAPI(title="Speech Speedometer")
     make_provider = _browser_provider if provider_factory is None else provider_factory
+    debug_logging_enabled = LiveWpmDebugSettings.from_environment().enabled
     application.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
 
     @application.get("/", response_class=FileResponse)
@@ -52,7 +58,11 @@ def create_app(*, provider_factory: ProviderFactory | None = None) -> FastAPI:
                 {"type": "error", "message": "Live transcription is not configured"}
             )
         else:
-            await BrowserLiveWpmSession(websocket, provider).run()
+            await BrowserLiveWpmSession(
+                websocket,
+                provider,
+                diagnostics=LiveWpmDiagnostics(enabled=debug_logging_enabled),
+            ).run()
         try:
             await websocket.close()
         except (RuntimeError, WebSocketDisconnect):
