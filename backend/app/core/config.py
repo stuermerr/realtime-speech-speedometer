@@ -33,6 +33,27 @@ def load_backend_environment(
 
 
 @dataclass(frozen=True, slots=True)
+class DeepgramSettings:
+    """Server-only credentials for the Deepgram realtime API."""
+
+    api_key: str = field(repr=False)
+
+    @classmethod
+    def from_environment(
+        cls, environment: Mapping[str, str] | None = None
+    ) -> DeepgramSettings:
+        if environment is None:
+            environment = load_backend_environment()
+
+        api_key = environment.get("DEEPGRAM_API_KEY", "").strip()
+        if not api_key:
+            raise ConfigurationError(
+                "Missing required Deepgram configuration: DEEPGRAM_API_KEY"
+            )
+        return cls(api_key=api_key)
+
+
+@dataclass(frozen=True, slots=True)
 class AzureSettings:
     endpoint: str
     api_key: str = field(repr=False)

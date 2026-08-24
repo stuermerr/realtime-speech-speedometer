@@ -7,6 +7,7 @@ import pytest
 from app.core.config import (
     AzureSettings,
     ConfigurationError,
+    DeepgramSettings,
     load_backend_environment,
 )
 
@@ -111,3 +112,21 @@ def test_invalid_endpoint_is_rejected_without_echoing_it(endpoint: str) -> None:
         AzureSettings.from_environment(environment)
 
     assert endpoint not in str(caught.value)
+
+
+def test_deepgram_settings_load_server_side_api_key_without_exposing_it() -> None:
+    secret = "deepgram-secret"
+
+    settings = DeepgramSettings.from_environment({"DEEPGRAM_API_KEY": secret})
+
+    assert settings.api_key == secret
+    assert secret not in repr(settings)
+
+
+def test_missing_deepgram_api_key_reports_only_variable_name() -> None:
+    with pytest.raises(ConfigurationError) as caught:
+        DeepgramSettings.from_environment({"DEEPGRAM_API_KEY": "  "})
+
+    assert str(caught.value) == (
+        "Missing required Deepgram configuration: DEEPGRAM_API_KEY"
+    )
