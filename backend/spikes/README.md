@@ -36,11 +36,14 @@ Run the paused German sample from `backend/`:
 uv run python -m spikes.run_deepgram_transcription
 ```
 
-The isolated comparison probe reads `DEEPGRAM_API_KEY`, streams
-`samples/sample_02.wav` in realtime, and requests Nova-3 interim results,
-word timestamps, VAD events, 600 ms endpointing, and utterance-end events. It
-writes a local report under `.artifacts/`, including the largest gaps between
-final words so the known pause can be checked against the audio timeline.
+The comparison probe reads `DEEPGRAM_API_KEY`, streams
+`samples/sample_02.wav` in realtime through the reusable application
+connection, and requests Nova-3 interim results, word timestamps, VAD events,
+600 ms endpointing, and utterance-end events. WAV normalization, realtime
+pacing, receive-time capture, and report generation remain isolated here in
+spike tooling. The probe writes a local report under `.artifacts/`, including
+the largest gaps between final words so the known pause can be checked against
+the audio timeline.
 
 ## Follow-up manual scenarios
 

@@ -579,7 +579,7 @@ The spike also showed that `SpeechStarted`, `is_final`, `speech_final`, and `Utt
 
 ### Status
 
-**Accepted as the state-management direction; verify exact interim timestamp behavior during integration**
+**Accepted**
 
 ### Decision
 
@@ -601,11 +601,18 @@ Finalized results should become authoritative history.
 
 The current interim result should be replaceable rather than permanently appended.
 
-### Important validation
+### Observed integration evidence
 
-The spike proved frequent interim `Results` and word timestamps in final results.
+The captured Nova-3 run contained 58 interim `Results`:
 
-During live integration, verify that interim word/timestamp payloads are consistently usable before letting the interim tail affect WPM. If not, initially calculate from finalized word history only and then revisit responsiveness.
+- 53 had a nonempty transcript and fully timed words;
+- 5 had an empty transcript and empty word list;
+- growing hypotheses revised word text, word count, and timestamps;
+- some later hypotheses dropped or replaced words from the prior result.
+
+Therefore each useful `Results` payload is normalized atomically. Downstream
+session state receives a complete replaceable hypothesis, never a partially
+parsed or append-only interim delta.
 
 ### Interview explanation
 
@@ -664,7 +671,7 @@ from the repository root.
 
 ### Status
 
-**Accepted**
+**Superseded by ADR-018**
 
 ### Decision
 
@@ -719,15 +726,56 @@ caller.
 
 ---
 
+## ADR-018 — Stateless Active-Speech WPM Calculation
+
+### Status
+
+**Accepted**
+
+### Decision
+
+The provider/session integration owns the complete current recognized-word
+timeline. On every update it supplies that timeline to
+`ActiveSpeechWpm.calculate(words)`.
+
+The calculator retains only its validated configuration. It validates the
+entire supplied timeline before calculating a result and retains no recognized
+words or session state between calls. The whole-word window selection, pause
+exclusion, interval union, minimum duration, and raw WPM semantics established
+by ADR-017 remain unchanged.
+
+### Why
+
+Deepgram interim hypotheses revise text, membership, and timestamps. The
+integration layer must already reconcile finalized history with the current
+replaceable interim tail, so retaining a second incremental word history in the
+WPM core creates competing ownership and makes corrections difficult to apply
+atomically.
+
+A pure calculation over the current provider-neutral timeline gives one owner
+for transcription state, makes repeated calls deterministic, and ensures an
+invalid call cannot affect a later valid measurement.
+
+### Consequences
+
+- Session integration owns finalized/interim word reconciliation.
+- The WPM core accepts the complete chronological timeline on each call.
+- Empty input produces an empty measurement, independent of previous calls.
+- Invalid input raises before producing output and cannot contaminate later
+  calculations.
+- `RecognizedWord` and `WpmMeasurement` remain the public domain names.
+- The duration field is named `active_speech_seconds` to match the metric.
+- Display-freeze behavior remains a session/UI responsibility.
+
+### Interview explanation
+
+> Realtime transcription corrections belong to the session boundary. I pass
+> its complete current word timeline into a stateless pace calculation, which
+> keeps reconciliation in one place and makes WPM repeatable and isolated.
+
+---
+
 # Open Decisions
-
-## OD-004 — Interim Result Use in WPM
-
-Verify with real microphone input:
-
-- whether interim `words[]` consistently contain useful timestamps;
-- how often the current hypothesis changes;
-- whether interim data materially improves perceived responsiveness.
 
 ## OD-006 — Yellow Pace Band
 

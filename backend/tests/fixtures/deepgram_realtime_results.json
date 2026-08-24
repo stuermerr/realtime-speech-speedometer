@@ -1,0 +1,85 @@
+[
+  {
+    "type": "Results",
+    "is_final": false,
+    "channel": {
+      "alternatives": [
+        {
+          "transcript": "Guten Morgen",
+          "words": [
+            {"word": "guten", "start": 0.16, "end": 0.48},
+            {"word": "morgen", "start": 0.50, "end": 0.91}
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "Results",
+    "is_final": false,
+    "channel": {
+      "alternatives": [
+        {
+          "transcript": "Guten Morgen zusammen",
+          "words": [
+            {"word": "guten", "start": 0.16, "end": 0.48},
+            {"word": "morgen", "start": 0.50, "end": 0.91},
+            {"word": "zusammen", "start": 0.94, "end": 1.42}
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "Results",
+    "is_final": false,
+    "channel": {
+      "alternatives": [
+        {
+          "transcript": "Guten Morgen miteinander",
+          "words": [
+            {"word": "guten", "start": 0.16, "end": 0.48},
+            {"word": "morgen", "start": 0.50, "end": 0.90},
+            {"word": "miteinander", "start": 0.92, "end": 1.51}
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "Results",
+    "is_final": false,
+    "channel": {
+      "alternatives": [
+        {
+          "transcript": "Guten Morgen",
+          "words": [
+            {"word": "guten", "start": 0.16, "end": 0.48},
+            {"word": "morgen", "start": 0.50, "end": 0.90}
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "Results",
+    "is_final": false,
+    "channel": {"alternatives": [{"transcript": "", "words": []}]}
+  },
+  {
+    "type": "Results",
+    "is_final": true,
+    "channel": {
+      "alternatives": [
+        {
+          "transcript": "Guten Morgen miteinander",
+          "words": [
+            {"word": "guten", "start": 0.16, "end": 0.48},
+            {"word": "morgen", "start": 0.50, "end": 0.90},
+            {"word": "miteinander", "start": 0.92, "end": 1.51}
+          ]
+        }
+      ]
+    }
+  }
+]

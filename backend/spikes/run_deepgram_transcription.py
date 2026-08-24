@@ -6,18 +6,25 @@ import os
 import sys
 import time
 from collections import Counter
-from collections.abc import AsyncIterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import Protocol, Self, cast
-from urllib.parse import urlencode
+from typing import cast
 
-from websockets.asyncio.client import connect
-from websockets.exceptions import ConnectionClosed, InvalidStatus
-
-from app.core.config import ConfigurationError, load_backend_environment
+from app.core.config import ConfigurationError, DeepgramSettings
+from app.services.deepgram_transcription import (
+    DEEPGRAM_CHANNELS,
+    DEEPGRAM_ENCODING,
+    DEEPGRAM_ENDPOINTING_MILLISECONDS,
+    DEEPGRAM_LANGUAGE,
+    DEEPGRAM_MODEL,
+    DEEPGRAM_QUERY_PARAMETERS,
+    DEEPGRAM_SAMPLE_RATE,
+    DEEPGRAM_UTTERANCE_END_MILLISECONDS,
+    DeepgramError,
+    DeepgramTranscriptionSession,
+)
 from spikes.run_realtime_transcription import (
     ARTIFACT_DIRECTORY,
     NormalizedAudio,
@@ -28,39 +35,7 @@ from spikes.provider_event import ProviderEvent
 
 
 SAMPLE_PATH = Path(__file__).resolve().parents[2] / "samples" / "sample_02.wav"
-DEEPGRAM_WEBSOCKET_URL = "wss://api.deepgram.com/v1/listen"
 DEFAULT_COMPLETION_TIMEOUT_SECONDS = 10.0
-
-
-class DeepgramError(RuntimeError):
-    """Base class for secret-safe Deepgram spike failures."""
-
-
-class _DeepgramConnection(Protocol):
-    def __aiter__(self) -> AsyncIterator[str | bytes]: ...
-
-    async def send(self, message: str | bytes) -> None: ...
-
-    async def close(self) -> None: ...
-
-
-@dataclass(frozen=True, slots=True)
-class DeepgramSettings:
-    api_key: str = field(repr=False)
-
-    @classmethod
-    def from_environment(
-        cls, environment: Mapping[str, str] | None = None
-    ) -> DeepgramSettings:
-        if environment is None:
-            environment = load_backend_environment()
-
-        api_key = environment.get("DEEPGRAM_API_KEY", "").strip()
-        if not api_key:
-            raise ConfigurationError(
-                "Missing required Deepgram configuration: DEEPGRAM_API_KEY"
-            )
-        return cls(api_key=api_key)
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,102 +45,6 @@ class DeepgramProbeResult:
     audio_duration_seconds: float
     run_started_at_seconds: float
     run_finished_at_seconds: float
-
-
-class DeepgramTranscriptionSession:
-    """One direct Deepgram WebSocket used only by the comparison spike."""
-
-    def __init__(self, settings: DeepgramSettings) -> None:
-        self._settings = settings
-        self._connection: _DeepgramConnection | None = None
-
-    async def __aenter__(self) -> Self:
-        parameters = urlencode(
-            {
-                "model": "nova-3",
-                "language": "de",
-                "encoding": "linear16",
-                "sample_rate": "24000",
-                "channels": "1",
-                "interim_results": "true",
-                "punctuate": "true",
-                "smart_format": "true",
-                "vad_events": "true",
-                "endpointing": "600",
-                "utterance_end_ms": "1000",
-            }
-        )
-        try:
-            self._connection = cast(
-                _DeepgramConnection,
-                await connect(
-                    f"{DEEPGRAM_WEBSOCKET_URL}?{parameters}",
-                    additional_headers={
-                        "Authorization": f"Token {self._settings.api_key}"
-                    },
-                ),
-            )
-        except Exception as error:
-            raise DeepgramError(_safe_connection_error(error)) from error
-        return self
-
-    async def __aexit__(
-        self,
-        exception_type: type[BaseException] | None,
-        exception: BaseException | None,
-        traceback: object | None,
-    ) -> None:
-        connection = self._connection
-        self._connection = None
-        if connection is not None:
-            await connection.close()
-
-    async def send_audio(self, audio: bytes) -> None:
-        connection = self._require_connection()
-        await connection.send(audio)
-
-    async def close_stream(self) -> None:
-        connection = self._require_connection()
-        await connection.send(json.dumps({"type": "CloseStream"}))
-
-    async def events(self) -> AsyncIterator[ProviderEvent]:
-        connection = self._require_connection()
-        try:
-            async for message in connection:
-                received_at = time.monotonic()
-                try:
-                    payload = json.loads(message)
-                except (json.JSONDecodeError, UnicodeDecodeError) as error:
-                    raise DeepgramError("Deepgram sent malformed JSON") from error
-                if not isinstance(payload, dict) or not isinstance(
-                    payload.get("type"), str
-                ):
-                    raise DeepgramError(
-                        "Deepgram sent an event without a valid type"
-                    )
-                typed_payload = cast(dict[str, object], payload)
-                if typed_payload["type"] == "Error":
-                    raise DeepgramError("Deepgram reported a service error")
-                yield ProviderEvent(
-                    received_at_seconds=received_at,
-                    type=cast(str, typed_payload["type"]),
-                    fields=MappingProxyType(typed_payload.copy()),
-                )
-        except ConnectionClosed:
-            return
-
-    def _require_connection(self) -> _DeepgramConnection:
-        if self._connection is None:
-            raise DeepgramError("Deepgram transcription session is not open")
-        return self._connection
-
-
-def _safe_connection_error(error: Exception) -> str:
-    if isinstance(error, InvalidStatus):
-        if error.response.status_code in (401, 403):
-            return "Deepgram authentication was rejected"
-        return "Deepgram rejected the WebSocket connection"
-    return "Could not connect to Deepgram"
 
 
 async def run_probe(
@@ -178,8 +57,15 @@ async def run_probe(
     events: list[ProviderEvent] = []
 
     async def receive() -> None:
-        async for event in session.events():
-            events.append(event)
+        async for payload in session.provider_events():
+            event_type = cast(str, payload["type"])
+            events.append(
+                ProviderEvent(
+                    received_at_seconds=time.monotonic(),
+                    type=event_type,
+                    fields=MappingProxyType(dict(payload)),
+                )
+            )
 
     receiver = asyncio.create_task(receive())
     try:
@@ -249,16 +135,21 @@ def write_report(result: DeepgramProbeResult, *, run_id: str) -> Path:
                     "before": current.get("word"),
                 }
             )
+    channel_label = (
+        "mono" if DEEPGRAM_CHANNELS == 1 else f"{DEEPGRAM_CHANNELS} channels"
+    )
     report = {
         "status": result.status,
         "configuration": {
-            "model": "nova-3",
-            "language": "de",
-            "endpointing_ms": 600,
-            "utterance_end_ms": 1000,
-            "vad_events": True,
-            "interim_results": True,
-            "audio": "linear16 mono 24000 Hz",
+            "model": DEEPGRAM_MODEL,
+            "language": DEEPGRAM_LANGUAGE,
+            "endpointing_ms": DEEPGRAM_ENDPOINTING_MILLISECONDS,
+            "utterance_end_ms": DEEPGRAM_UTTERANCE_END_MILLISECONDS,
+            "vad_events": DEEPGRAM_QUERY_PARAMETERS["vad_events"] == "true",
+            "interim_results": (
+                DEEPGRAM_QUERY_PARAMETERS["interim_results"] == "true"
+            ),
+            "audio": f"{DEEPGRAM_ENCODING} {channel_label} {DEEPGRAM_SAMPLE_RATE} Hz",
         },
         "audio_duration_seconds": result.audio_duration_seconds,
         "run_duration_seconds": (
