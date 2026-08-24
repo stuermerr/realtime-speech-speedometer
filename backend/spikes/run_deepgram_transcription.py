@@ -25,6 +25,8 @@ from app.services.deepgram_transcription import (
     DeepgramError,
     DeepgramTranscriptionSession,
 )
+from app.services.live_wpm import LiveWpmPipeline
+from app.services.wpm import WpmMeasurement
 from spikes.run_realtime_transcription import (
     ARTIFACT_DIRECTORY,
     NormalizedAudio,
@@ -42,6 +44,7 @@ DEFAULT_COMPLETION_TIMEOUT_SECONDS = 10.0
 class DeepgramProbeResult:
     status: str
     events: tuple[ProviderEvent, ...]
+    measurements: tuple[WpmMeasurement, ...]
     audio_duration_seconds: float
     run_started_at_seconds: float
     run_finished_at_seconds: float
@@ -55,6 +58,8 @@ async def run_probe(
 ) -> DeepgramProbeResult:
     started_at = time.monotonic()
     events: list[ProviderEvent] = []
+    measurements: list[WpmMeasurement] = []
+    pipeline = LiveWpmPipeline()
 
     async def receive() -> None:
         async for payload in session.provider_events():
@@ -66,6 +71,9 @@ async def run_probe(
                     fields=MappingProxyType(dict(payload)),
                 )
             )
+            measurement = pipeline.process_event(payload)
+            if measurement is not None:
+                measurements.append(measurement)
 
     receiver = asyncio.create_task(receive())
     try:
@@ -83,6 +91,7 @@ async def run_probe(
     return DeepgramProbeResult(
         status=status,
         events=tuple(events),
+        measurements=tuple(measurements),
         audio_duration_seconds=audio.duration_seconds,
         run_started_at_seconds=started_at,
         run_finished_at_seconds=time.monotonic(),
@@ -158,6 +167,16 @@ def write_report(result: DeepgramProbeResult, *, run_id: str) -> Path:
         "event_types": dict(
             sorted(Counter(event.type for event in result.events).items())
         ),
+        "wpm_measurements": [
+            {
+                "wpm": measurement.wpm,
+                "word_count": measurement.word_count,
+                "active_speech_seconds": measurement.active_speech_seconds,
+                "audio_start_seconds": measurement.audio_start_seconds,
+                "audio_end_seconds": measurement.audio_end_seconds,
+            }
+            for measurement in result.measurements
+        ],
         "results": summaries,
         "largest_final_word_gaps": sorted(
             word_gaps, key=lambda gap: cast(float, gap["seconds"]), reverse=True
@@ -197,7 +216,7 @@ def main() -> int:
         return 1
     print(
         f"Deepgram spike {result.status}: {len(result.events)} events; "
-        f"report={report_path}"
+        f"{len(result.measurements)} WPM measurements; report={report_path}"
     )
     return 0 if result.status == "complete" else 2
 
