@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
+import logging
 from collections.abc import AsyncIterator, Mapping
 
 import pytest
@@ -102,16 +104,22 @@ def test_live_websocket_owns_a_fresh_provider_for_each_session() -> None:
 
 
 def test_live_wpm_debug_environment_enables_session_records(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("LIVE_WPM_DEBUG", "true")
+    output = io.StringIO()
+    uvicorn_handler = logging.StreamHandler(output)
+    uvicorn_logger = logging.getLogger("uvicorn.error")
+    monkeypatch.setattr(uvicorn_logger, "handlers", [uvicorn_handler])
+    monkeypatch.setattr(uvicorn_logger, "level", logging.INFO)
+    monkeypatch.setattr(uvicorn_logger, "propagate", False)
     client = TestClient(create_app(provider_factory=EndpointProvider))
 
     with client.websocket_connect("/ws/live") as websocket:
         websocket.send_json({"type": "stop"})
         assert websocket.receive_json() == {"type": "stopped"}
 
-    records = [json.loads(record.message) for record in caplog.records]
+    records = [json.loads(line) for line in output.getvalue().splitlines()]
     assert ("session", "started") in {
         (record["stage"], record["event"]) for record in records
     }

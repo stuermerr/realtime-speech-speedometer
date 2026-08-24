@@ -17,7 +17,7 @@ from app.services.live_wpm import LiveWpmPipeline
 from app.services.wpm import WpmMeasurement
 
 
-_diagnostic_logger = logging.getLogger("speech_speedometer.live_wpm")
+_diagnostic_logger = logging.getLogger("uvicorn.error.speech_speedometer.live_wpm")
 DiagnosticValue = str | int | float | bool | None
 
 
@@ -212,6 +212,13 @@ class BrowserLiveWpmSession:
             self._diagnostics.record("session", "cleanup_finished")
 
     async def _forward_browser(self) -> None:
+        try:
+            await self._forward_browser_messages()
+        except asyncio.CancelledError:
+            self._diagnostics.record("browser", "flow_cancelled")
+            raise
+
+    async def _forward_browser_messages(self) -> None:
         chunk_index = 0
         while True:
             message = await self._browser.receive()
@@ -254,7 +261,15 @@ class BrowserLiveWpmSession:
         try:
             async for event in self._provider.provider_events():
                 event_type = _safe_provider_event_type(event.get("type"))
-                result = parse_deepgram_event(event)
+                try:
+                    result = parse_deepgram_event(event)
+                except DeepgramError:
+                    self._diagnostics.record(
+                        "provider",
+                        "event_received",
+                        provider_event_type=event_type,
+                    )
+                    raise
                 if result is None:
                     self._diagnostics.record(
                         "provider",
@@ -337,7 +352,13 @@ async def _cancel(task: asyncio.Task[object] | None) -> None:
 
 
 def _safe_provider_event_type(value: object) -> str:
-    if value in {"Results", "Metadata", "SpeechStarted", "UtteranceEnd"}:
+    if value in {
+        "Results",
+        "Metadata",
+        "SpeechStarted",
+        "UtteranceEnd",
+        "Error",
+    }:
         assert isinstance(value, str)
         return value
     return "Other"

@@ -434,6 +434,12 @@ def test_live_wpm_diagnostics_categorize_abnormal_provider_close_safely() -> Non
     records = [json.loads(line) for line in output]
     assert any(
         record["stage"] == "provider"
+        and record["event"] == "event_received"
+        and record["provider_event_type"] == "Error"
+        for record in records
+    )
+    assert any(
+        record["stage"] == "provider"
         and record["event"] == "stream_closed"
         and record["outcome"] == "abnormal"
         for record in records
@@ -472,3 +478,27 @@ def test_live_wpm_diagnostics_show_timeout_cancellation_and_cleanup() -> None:
     assert ("provider", "drain_timeout", None) in events
     assert ("session", "cleanup_started", None) in events
     assert ("session", "cleanup_finished", None) in events
+
+
+def test_live_wpm_diagnostics_show_browser_flow_cancellation() -> None:
+    browser = BlockingBrowser([])
+    provider = FakeProvider(
+        [{"type": "Metadata", "request_id": "safe"}],
+        wait_for_stop=False,
+    )
+    output: list[str] = []
+
+    run(
+        BrowserLiveWpmSession(
+            browser,
+            provider,
+            diagnostics=LiveWpmDiagnostics(enabled=True, sink=output.append),
+            drain_timeout_seconds=0.5,
+        ).run()
+    )
+
+    records = [json.loads(line) for line in output]
+    assert any(
+        record["stage"] == "browser" and record["event"] == "flow_cancelled"
+        for record in records
+    )
