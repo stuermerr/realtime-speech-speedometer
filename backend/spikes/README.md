@@ -42,8 +42,9 @@ connection, and requests Nova-3 interim results, word timestamps, VAD events,
 600 ms endpointing, and utterance-end events. WAV normalization, realtime
 pacing, receive-time capture, and report generation remain isolated here in
 spike tooling. The probe writes a local report under `.artifacts/`, including
-the largest gaps between final words so the known pause can be checked against
-the audio timeline.
+the live WPM measurements and largest gaps between final words. WPM is derived
+from reconciled provider word timestamps, while receive times remain latency
+evidence only.
 
 ## Follow-up manual scenarios
 
