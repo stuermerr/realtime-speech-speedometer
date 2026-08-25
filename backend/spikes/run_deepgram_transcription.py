@@ -22,6 +22,7 @@ from app.services.deepgram_transcription import (
     DEEPGRAM_QUERY_PARAMETERS,
     DEEPGRAM_SAMPLE_RATE,
     DEEPGRAM_UTTERANCE_END_MILLISECONDS,
+    DeepgramAudioMode,
     DeepgramError,
     DeepgramTranscriptionSession,
 )
@@ -200,7 +201,10 @@ async def run_fixed_sample() -> tuple[DeepgramProbeResult, Path]:
     )
     if timeout <= 0:
         raise ValueError("Completion timeout must be positive")
-    async with DeepgramTranscriptionSession(settings) as session:
+    async with DeepgramTranscriptionSession(
+        settings,
+        audio_mode=DeepgramAudioMode.LINEAR16_24KHZ_MONO,
+    ) as session:
         result = await run_probe(
             session, audio, completion_timeout_seconds=timeout
         )
