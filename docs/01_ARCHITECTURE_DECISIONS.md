@@ -871,13 +871,86 @@ structure without improving that evidence.
 
 ---
 
+## ADR-021 — React Product UI and Backend-Authoritative Live Pace Protocol
+
+### Status
+
+**Accepted**
+
+### Decision
+
+Replace the temporary Vanilla debug client with one strict TypeScript React UI
+built by Vite. During development, Vite proxies `/ws/live` to FastAPI. For the
+production artifact, FastAPI serves the built frontend and retains `/health`
+and `/ws/live` as backend-owned routes. There is one browser product UI, not a
+parallel debug client.
+
+Each backend `measurement` message carries `wpm` and `pace_status` with this
+invariant:
+
+```text
+wpm available     <=> pace_status is "green" or "red"
+wpm unavailable   <=> pace_status is null
+```
+
+The backend classifies raw WPM before display rounding. The inclusive target
+range is 115–150 WPM; every other available value is red. There is no yellow
+state. The frontend treats an invalid WPM/status combination as a protocol
+error rather than reclassifying it.
+
+The browser owns a small session adapter for capability checks, microphone and
+`MediaRecorder` lifecycle, ordered audio delivery, the WebSocket connection,
+a 10-second connection timeout, Stop, and idempotent cleanup. A local reducer
+owns only visible lifecycle state: `idle`, `starting`, `listening`,
+`finalizing`, `completed`, `error`, and `unsupported`.
+
+The live presentation uses a fixed linear 60–220 WPM scale. Numeric WPM is
+never clamped; only marker position is clamped for presentation. The UI retains
+the last available WPM, status, and marker when a later measurement is
+unavailable, and clears them when a fresh session starts.
+
+### Why
+
+- Pace classification is product logic and must be deterministic and identical
+  for every client.
+- Raw-value classification avoids displaying 150 for a value such as 150.4
+  while incorrectly showing it as in range.
+- One browser adapter localizes resource ownership and makes failure cleanup
+  testable without introducing global state infrastructure.
+- A fixed scale makes direction and target boundaries stable at presentation
+  distance while preserving the actual measured value.
+- React and strict TypeScript provide a small, explicit product-state model for
+  the final browser experience; Vite keeps development and production tooling
+  isolated in `frontend/` as required by ADR-016.
+
+### Consequences
+
+- Backend and frontend tests both exercise the public WebSocket message shape.
+- Unsupported environments stop before microphone permission and do not offer
+  a meaningless retry.
+- Recoverable errors offer a retry that creates an entirely new adapter and
+  session.
+- Stop transitions the UI immediately to `finalizing`; the adapter preserves
+  the recorder's final chunk, waits for ordered sends, sends the existing Stop
+  command, and waits for the backend's provider-drained `stopped` message.
+- This M5 slice does not change ADR-011: the accepted deterministic session
+  summary remains required, but its implementation is owned by issue #17.
+
+### Rationale summary
+
+> The backend owns the raw pace classification, while the browser owns only
+> presentation state and media resources. A small session adapter and reducer
+> make the lifecycle explicit, and one fixed scale keeps feedback legible and
+> predictable across the presentation.
+
+---
+
 # Open Decisions
 
 ## OD-006 — Yellow Pace Band
 
-Optional.
-
-Do not implement until the core red/green UX is working.
+**Closed by ADR-021.** The MVP uses only the explicit inclusive green range and
+red outside it. A yellow band is not justified by current evidence.
 
 ## OD-007 — Session Summary Grouping
 

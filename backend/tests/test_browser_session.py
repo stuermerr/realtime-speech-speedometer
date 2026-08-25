@@ -134,6 +134,7 @@ def test_binary_audio_and_stop_drain_to_measurements_then_stopped() -> None:
         {
             "type": "measurement",
             "wpm": 120.0,
+            "pace_status": "green",
             "word_count": 8,
             "active_speech_seconds": 4.0,
             "audio_start_seconds": 0.0,
@@ -156,6 +157,7 @@ def test_unavailable_measurement_is_null_and_unchanged_result_is_suppressed() ->
         {
             "type": "measurement",
             "wpm": None,
+            "pace_status": None,
             "word_count": 1,
             "active_speech_seconds": 0.5,
             "audio_start_seconds": 0.0,

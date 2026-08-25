@@ -20,6 +20,7 @@ htmlcov/
 # Frontend dependencies and build output
 frontend/node_modules/
 frontend/dist/
+*.tsbuildinfo
 
 # Generated spike and analysis artifacts
 backend/spikes/.artifacts/
@@ -28,6 +29,7 @@ docs/graphify-out/cache/
 
 # Local scratch files
 .scratch/
+.playwright-cli/
 *.log
 
 # OS and editor files

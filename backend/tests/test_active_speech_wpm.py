@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from app.services.wpm import ActiveSpeechWpm, RecognizedWord
+from app.services.wpm import ActiveSpeechWpm, RecognizedWord, classify_pace
 
 
 def word(index: int, start: float, end: float) -> RecognizedWord:
@@ -23,6 +23,22 @@ def test_continuous_speech_reports_unrounded_wpm() -> None:
     assert measurement.wpm == 120.0
     assert measurement.audio_start_seconds == 0.0
     assert measurement.audio_end_seconds == 4.0
+
+
+@pytest.mark.parametrize(
+    ("wpm", "expected"),
+    [
+        (None, None),
+        (114.9, "red"),
+        (115.0, "green"),
+        (150.0, "green"),
+        (150.4, "red"),
+    ],
+)
+def test_pace_is_classified_from_the_unrounded_measurement(
+    wpm: float | None, expected: str | None
+) -> None:
+    assert classify_pace(wpm) == expected
 
 
 def test_fast_speech_reports_high_wpm() -> None:

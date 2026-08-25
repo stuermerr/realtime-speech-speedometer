@@ -5,6 +5,7 @@ import io
 import json
 import logging
 from collections.abc import AsyncIterator, Mapping
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,21 +21,25 @@ def test_health_check_does_not_require_or_expose_azure_settings() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_root_serves_vanilla_microphone_debug_client() -> None:
-    client = TestClient(app)
+def test_root_serves_the_vite_product_build(tmp_path: Path) -> None:
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    (tmp_path / "index.html").write_text(
+        '<h1>Speech Speedometer</h1><script src="/assets/product.js"></script>',
+        encoding="utf-8",
+    )
+    (assets / "product.js").write_text("const product = true;", encoding="utf-8")
+    client = TestClient(create_app(frontend_directory=tmp_path))
 
     response = client.get("/")
-    script = client.get("/static/app.js")
+    script = client.get("/assets/product.js")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "Speech Speedometer" in response.text
-    assert 'src="/static/app.js"' in response.text
+    assert 'src="/assets/product.js"' in response.text
     assert script.status_code == 200
-    assert "audio/webm;codecs=opus" in script.text
-    assert "MediaRecorder.isTypeSupported" in script.text
-    assert "CHUNK_MILLISECONDS = 250" in script.text
-    assert "recorder.start(CHUNK_MILLISECONDS)" in script.text
+    assert "const product = true" in script.text
 
 
 class EndpointProvider:
