@@ -66,6 +66,12 @@ h1 { margin-top: 0.15rem; font: 600 clamp(1rem, 1.8vw, 1.45rem)/1.1 "Arial Narro
 .scale-guidance span:nth-child(2) { color: var(--green); }
 
 .session-controls { min-height: 5.7rem; display: grid; place-items: center; align-content: center; }
+.summary { text-align: center; }
+.summary-metrics { display: grid; grid-template-columns: repeat(4, minmax(5rem, 1fr)); gap: .7rem; margin: 0 0 1rem; }
+.summary-metrics div { border: 1px solid var(--line); border-radius: .5rem; padding: .45rem .7rem; }
+.summary-metrics dt { color: var(--muted); font-size: .67rem; letter-spacing: .06em; text-transform: uppercase; }
+.summary-metrics dd { margin: .2rem 0 0; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.summary-note { margin: 0 0 .7rem; color: var(--muted); font-size: .85rem; }
 .primary-button, .stop-button { min-width: 14rem; min-height: 3.4rem; padding: .8rem 1.5rem; border-radius: 99px; border: 1px solid transparent; cursor: pointer; font-weight: 700; transition: transform 130ms, box-shadow 130ms, background 130ms; }
 .primary-button { background: var(--green); color: #07150f; box-shadow: 0 0 28px rgba(112,240,173,.16); }
 .stop-button { border-color: #566170; color: #f6f7f8; background: #151a21; }
@@ -89,6 +95,7 @@ button:disabled { cursor: wait; opacity: .58; }
   .target-copy { display: none; }
   .speedometer { padding-inline: 1rem; }
   .pace-scale { width: 92vw; }
+  .summary-metrics { grid-template-columns: repeat(2, minmax(7rem, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

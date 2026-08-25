@@ -98,7 +98,14 @@ def test_live_websocket_owns_a_fresh_provider_for_each_session() -> None:
             websocket.send_bytes(audio)
             websocket.send_json({"type": "stop"})
             assert websocket.receive_json()["word_count"] == 1
-            assert websocket.receive_json() == {"type": "stopped"}
+            assert websocket.receive_json() == {
+                "type": "summary",
+                "average_speaking_pace": None,
+                "finalized_words": 1,
+                "active_speaking_seconds": 0.5,
+                "presentation_duration_seconds": 0.5,
+            }
+            assert websocket.receive_json() == {"type": "stopped", "reason": "user"}
 
     assert len(providers) == 2
     assert [provider.audio for provider in providers] == [
@@ -122,7 +129,8 @@ def test_live_wpm_debug_environment_enables_session_records(
 
     with client.websocket_connect("/ws/live") as websocket:
         websocket.send_json({"type": "stop"})
-        assert websocket.receive_json() == {"type": "stopped"}
+        assert websocket.receive_json()["type"] == "summary"
+        assert websocket.receive_json() == {"type": "stopped", "reason": "user"}
 
     records = [json.loads(line) for line in output.getvalue().splitlines()]
     assert ("session", "started") in {

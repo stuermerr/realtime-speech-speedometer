@@ -12,8 +12,13 @@ from typing import Literal, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
-from app.services.deepgram_transcription import DeepgramError, parse_deepgram_event
+from app.services.deepgram_transcription import (
+    DeepgramError,
+    ParsedDeepgramResult,
+    parse_deepgram_event,
+)
 from app.services.live_wpm import LiveWpmPipeline
+from app.services.session_summary import SessionSummary, SessionSummaryCalculator
 from app.services.wpm import PaceStatus, WpmMeasurement, classify_pace
 
 
@@ -130,6 +135,31 @@ class _MeasurementMessage(BaseModel):
 
 class _StoppedMessage(BaseModel):
     type: Literal["stopped"] = "stopped"
+    reason: Literal["user", "inactivity"]
+
+
+class _SummaryMessage(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["summary"] = "summary"
+    average_speaking_pace: float | None
+    finalized_words: int
+    active_speaking_seconds: float
+    presentation_duration_seconds: float
+
+    @classmethod
+    def from_summary(cls, summary: SessionSummary) -> Self:
+        return cls(
+            average_speaking_pace=summary.average_speaking_pace,
+            finalized_words=summary.finalized_words,
+            active_speaking_seconds=summary.active_speaking_seconds,
+            presentation_duration_seconds=summary.presentation_duration_seconds,
+        )
+
+
+class _StopRequestedMessage(BaseModel):
+    type: Literal["stop_requested"] = "stop_requested"
+    reason: Literal["inactivity"] = "inactivity"
 
 
 class _ErrorMessage(BaseModel):
@@ -147,13 +177,24 @@ class BrowserLiveWpmSession:
         *,
         diagnostics: LiveWpmDiagnostics | None = None,
         drain_timeout_seconds: float = 5.0,
+        inactivity_timeout_seconds: float = 300.0,
+        stop_ack_timeout_seconds: float = 5.0,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if drain_timeout_seconds <= 0:
             raise ValueError("Provider drain timeout must be positive")
+        if inactivity_timeout_seconds <= 0 or stop_ack_timeout_seconds <= 0:
+            raise ValueError("Session timeouts must be positive")
         self._browser = browser
         self._provider = provider
         self._drain_timeout_seconds = drain_timeout_seconds
+        self._inactivity_timeout_seconds = inactivity_timeout_seconds
+        self._stop_ack_timeout_seconds = stop_ack_timeout_seconds
+        self._clock = clock
         self._pipeline = LiveWpmPipeline()
+        self._summary_calculator = SessionSummaryCalculator()
+        self._last_recognized_progress_at = clock()
+        self._maximum_recognized_end: float | None = None
         self._diagnostics = (
             LiveWpmDiagnostics(enabled=False) if diagnostics is None else diagnostics
         )
@@ -161,6 +202,7 @@ class BrowserLiveWpmSession:
     async def run(self) -> None:
         browser_task: asyncio.Task[None] | None = None
         provider_task: asyncio.Task[bool] | None = None
+        inactivity_task: asyncio.Task[None] | None = None
         self._diagnostics.record("session", "started")
         try:
             self._diagnostics.record("provider", "opening")
@@ -168,8 +210,9 @@ class BrowserLiveWpmSession:
                 self._diagnostics.record("provider", "opened")
                 browser_task = asyncio.create_task(self._forward_browser())
                 provider_task = asyncio.create_task(self._forward_provider())
+                inactivity_task = asyncio.create_task(self._wait_for_inactivity())
                 done, _ = await asyncio.wait(
-                    (browser_task, provider_task),
+                    (browser_task, provider_task, inactivity_task),
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
@@ -184,8 +227,26 @@ class BrowserLiveWpmSession:
                         raise BrowserSessionProtocolError(
                             "Deepgram closed without final Metadata"
                         )
-                    await self._send(_StoppedMessage())
-                    self._diagnostics.record("browser", "stopped_sent")
+                    await self._send_completion("user")
+                    return
+
+                if inactivity_task in done:
+                    await inactivity_task
+                    self._diagnostics.record("session", "inactivity_requested")
+                    await self._send(_StopRequestedMessage())
+                    try:
+                        async with asyncio.timeout(self._stop_ack_timeout_seconds):
+                            await browser_task
+                    except TimeoutError:
+                        raise BrowserSessionProtocolError(
+                            "Browser did not acknowledge inactivity stop"
+                        ) from None
+                    metadata_seen = await self._drain_provider(provider_task)
+                    if not metadata_seen:
+                        raise BrowserSessionProtocolError(
+                            "Deepgram closed without final Metadata"
+                        )
+                    await self._send_completion("inactivity")
                     return
 
                 try:
@@ -217,6 +278,7 @@ class BrowserLiveWpmSession:
             self._diagnostics.record("session", "cleanup_started")
             await _cancel(browser_task)
             await _cancel(provider_task)
+            await _cancel(inactivity_task)
             self._diagnostics.record("session", "cleanup_finished")
 
     async def _forward_browser(self) -> None:
@@ -300,6 +362,7 @@ class BrowserLiveWpmSession:
                     audio_end_seconds=audio_end,
                 )
                 measurement = self._pipeline.process_result(result)
+                self._record_recognized_progress(result)
                 changed = measurement is not None
                 self._diagnostics.record(
                     "pipeline", "timeline_changed", changed=changed
@@ -330,6 +393,30 @@ class BrowserLiveWpmSession:
     async def _drain_provider(self, provider_task: asyncio.Task[bool]) -> bool:
         async with asyncio.timeout(self._drain_timeout_seconds):
             return await provider_task
+
+    async def _wait_for_inactivity(self) -> None:
+        while True:
+            remaining = (
+                self._inactivity_timeout_seconds
+                - (self._clock() - self._last_recognized_progress_at)
+            )
+            if remaining <= 0:
+                return
+            await asyncio.sleep(remaining)
+
+    def _record_recognized_progress(self, result: ParsedDeepgramResult) -> None:
+        end = max((word.end_seconds for word in result.words), default=None)
+        if end is not None and (
+            self._maximum_recognized_end is None or end > self._maximum_recognized_end
+        ):
+            self._maximum_recognized_end = end
+            self._last_recognized_progress_at = self._clock()
+
+    async def _send_completion(self, reason: Literal["user", "inactivity"]) -> None:
+        summary = self._summary_calculator.build(self._pipeline.finalized_words)
+        await self._send(_SummaryMessage.from_summary(summary))
+        await self._send(_StoppedMessage(reason=reason))
+        self._diagnostics.record("browser", "stopped_sent", reason=reason)
 
     async def _send(self, message: BaseModel) -> None:
         await self._browser.send_json(message.model_dump(mode="json"))

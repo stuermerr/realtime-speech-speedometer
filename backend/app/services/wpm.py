@@ -79,7 +79,7 @@ class ActiveSpeechWpm:
             start_index -= 1
             selected_words = words[start_index:]
             if (
-                _active_speech_duration(selected_words, self._pause_threshold_seconds)
+                active_speech_duration(selected_words, self._pause_threshold_seconds)
                 >= self._window_seconds
             ):
                 return selected_words
@@ -95,7 +95,7 @@ class ActiveSpeechWpm:
                 audio_end_seconds=None,
             )
 
-        active_speech_seconds = _active_speech_duration(
+        active_speech_seconds = active_speech_duration(
             words, self._pause_threshold_seconds
         )
         wpm = None
@@ -143,7 +143,7 @@ def _is_finite_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def _active_speech_duration(
+def active_speech_duration(
     words: tuple[RecognizedWord, ...], pause_threshold_seconds: float
 ) -> float:
     if not words:

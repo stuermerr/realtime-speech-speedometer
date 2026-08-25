@@ -116,13 +116,25 @@ describe("browser session adapter", () => {
     expect(browser.socket.sent[2]).toBe(JSON.stringify({ type: "stop" }));
 
     browser.socket.dispatchEvent(
-      new MessageEvent("message", { data: JSON.stringify({ type: "stopped" }) }),
+      new MessageEvent("message", { data: JSON.stringify({ type: "summary", average_speaking_pace: null, finalized_words: 0, active_speaking_seconds: 0, presentation_duration_seconds: 0 }) }),
+    );
+    browser.socket.dispatchEvent(
+      new MessageEvent("message", { data: JSON.stringify({ type: "stopped", reason: "user" }) }),
     );
     await settle();
     session.cleanup();
 
     expect(events).toContainEqual({ type: "listening" });
-    expect(events).toContainEqual({ type: "stopped" });
+    expect(events).toContainEqual({
+      type: "summary",
+      summary: {
+        averageSpeakingPace: null,
+        finalizedWords: 0,
+        activeSpeakingSeconds: 0,
+        presentationDurationSeconds: 0,
+      },
+    });
+    expect(events).toContainEqual({ type: "stopped", reason: "user" });
     expect(browser.stopTrack).toHaveBeenCalledTimes(1);
     expect(browser.socket.closeCount).toBe(1);
   });

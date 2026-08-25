@@ -19,17 +19,28 @@ export interface PaceDisplay {
   readonly paceStatus: PaceStatus;
 }
 
+export interface SessionSummary {
+  readonly averageSpeakingPace: number | null;
+  readonly finalizedWords: number;
+  readonly activeSpeakingSeconds: number;
+  readonly presentationDurationSeconds: number;
+}
+
 export interface SessionState {
   readonly lifecycle: Lifecycle;
   readonly display: PaceDisplay | null;
   readonly error: string | null;
+  readonly pendingSummary: SessionSummary | null;
+  readonly completedSummary: SessionSummary | null;
+  readonly completionReason: "user" | "inactivity" | null;
 }
 
 export type SessionAction =
   | { readonly type: "start" }
   | { readonly type: "listening" }
   | { readonly type: "stop" }
-  | { readonly type: "stopped" }
+  | { readonly type: "summary"; readonly summary: SessionSummary }
+  | { readonly type: "stopped"; readonly reason: "user" | "inactivity" }
   | {
       readonly type: "measurement";
       readonly wpm: number | null;
@@ -42,6 +53,9 @@ export const INITIAL_STATE: SessionState = {
   lifecycle: "idle",
   display: null,
   error: null,
+  pendingSummary: null,
+  completedSummary: null,
+  completionReason: null,
 };
 
 export function reduceSession(
@@ -50,13 +64,22 @@ export function reduceSession(
 ): SessionState {
   switch (action.type) {
     case "start":
-      return { lifecycle: "starting", display: null, error: null };
+      return {
+        lifecycle: "starting", display: null, error: null, pendingSummary: null,
+        completedSummary: null, completionReason: null,
+      };
     case "listening":
       return { ...state, lifecycle: "listening", error: null };
     case "stop":
       return { ...state, lifecycle: "finalizing" };
+    case "summary":
+      return { ...state, pendingSummary: action.summary };
     case "stopped":
-      return { ...state, lifecycle: "completed" };
+      if (state.pendingSummary === null) return protocolError(state);
+      return {
+        ...state, lifecycle: "completed", completedSummary: state.pendingSummary,
+        pendingSummary: null, completionReason: action.reason,
+      };
     case "measurement": {
       const wpmAvailable = action.wpm !== null;
       const statusAvailable = action.paceStatus !== null;
@@ -75,9 +98,9 @@ export function reduceSession(
       };
     }
     case "fail":
-      return { ...state, lifecycle: "error", error: action.message };
+      return { ...state, lifecycle: "error", error: action.message, pendingSummary: null };
     case "unsupported":
-      return { ...state, lifecycle: "unsupported", error: action.message };
+      return { ...state, lifecycle: "unsupported", error: action.message, pendingSummary: null };
   }
 }
 
