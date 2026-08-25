@@ -1,4 +1,4 @@
-import type { PaceStatus, SessionAction } from "./state";
+import type { PaceStatus, SessionAction, SessionSummary } from "./state";
 
 const MIME_TYPE = "audio/webm;codecs=opus";
 const CHUNK_MILLISECONDS = 250;
@@ -181,8 +181,16 @@ export class BrowserSession {
         return;
       }
       if (message.type === "stopped") {
-        this.dispatch({ type: "stopped" });
+        this.dispatch({ type: "stopped", reason: message.reason });
         this.cleanup();
+        return;
+      }
+      if (message.type === "summary") {
+        this.dispatch({ type: "summary", summary: message.summary });
+        return;
+      }
+      if (message.type === "stop_requested") {
+        this.stop();
         return;
       }
       this.fail(message.message);
@@ -216,9 +224,11 @@ type BackendMessage =
   | {
       readonly type: "measurement";
       readonly wpm: number | null;
-      readonly paceStatus: PaceStatus | null;
-    }
-  | { readonly type: "stopped" }
+    readonly paceStatus: PaceStatus | null;
+  }
+  | { readonly type: "summary"; readonly summary: SessionSummary }
+  | { readonly type: "stopped"; readonly reason: "user" | "inactivity" }
+  | { readonly type: "stop_requested"; readonly reason: "inactivity" }
   | { readonly type: "error"; readonly message: string };
 
 function parseBackendMessage(raw: unknown): BackendMessage {
@@ -227,9 +237,18 @@ function parseBackendMessage(raw: unknown): BackendMessage {
   if (!isRecord(value) || typeof value.type !== "string") {
     throw new Error("Message must be an object");
   }
-  if (value.type === "stopped") return { type: "stopped" };
+  if (value.type === "stopped" && (value.reason === "user" || value.reason === "inactivity")) {
+    return { type: "stopped", reason: value.reason };
+  }
+  if (value.type === "stop_requested" && value.reason === "inactivity") {
+    return { type: "stop_requested", reason: "inactivity" };
+  }
   if (value.type === "error" && typeof value.message === "string") {
     return { type: "error", message: value.message };
+  }
+  if (value.type === "summary") {
+    const summary = parseSummary(value);
+    return { type: "summary", summary };
   }
   if (value.type !== "measurement") throw new Error("Unknown message");
 
@@ -243,6 +262,28 @@ function parseBackendMessage(raw: unknown): BackendMessage {
     throw new Error("Invalid measurement");
   }
   return { type: "measurement", wpm, paceStatus };
+}
+
+function parseSummary(value: Record<string, unknown>): SessionSummary {
+  const averageSpeakingPace = value.average_speaking_pace;
+  const finalizedWords = value.finalized_words;
+  const activeSpeakingSeconds = value.active_speaking_seconds;
+  const presentationDurationSeconds = value.presentation_duration_seconds;
+  if (
+    !(averageSpeakingPace === null || (typeof averageSpeakingPace === "number" && Number.isFinite(averageSpeakingPace)))
+    || !isNonNegativeInteger(finalizedWords)
+    || !isNonNegativeFinite(activeSpeakingSeconds)
+    || !isNonNegativeFinite(presentationDurationSeconds)
+  ) throw new Error("Invalid summary");
+  return { averageSpeakingPace, finalizedWords, activeSpeakingSeconds, presentationDurationSeconds };
+}
+
+function isNonNegativeFinite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return isNonNegativeFinite(value) && Number.isInteger(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

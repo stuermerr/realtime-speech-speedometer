@@ -945,6 +945,77 @@ unavailable, and clears them when a fresh session starts.
 
 ---
 
+## ADR-022 — Deterministic Global Session Summary and Inactivity Finalization
+
+### Status
+
+**Accepted**
+
+### Decision
+
+After a successful Deepgram provider drain, the backend emits exactly one
+authoritative `summary` event followed by exactly one `stopped` event. The
+summary is derived only from the immutable, session-owned finalized-word
+timeline; interim hypotheses, provider chunk text, and provider chunk
+boundaries are not retained for it.
+
+The global summary contains four unrounded quantitative values:
+
+- `average_speaking_pace` (or `null` when active speech is below four seconds);
+- `finalized_words`;
+- `active_speaking_seconds`;
+- `presentation_duration_seconds`.
+
+Active speech uses the same policy as live WPM: word intervals and gaps below
+one second count; gaps of one second or more do not. Presentation duration is
+the first finalized word start through the last finalized word end. It is not
+wall-clock session time and the summary pace is never an average of rolling
+live measurements. An empty finalized timeline produces a valid empty summary.
+
+The browser stores a received summary as pending and reveals it only after the
+following `stopped` event. An error or disconnect discards pending data. It
+rounds Average WPM for display and formats durations as `m:ss`, without
+changing backend values. A fresh presentation clears all live, pending,
+completed, reason, and error state.
+
+The backend tracks recognized-speech progress by the strictly advancing maximum
+recognized word end timestamp. Five minutes without progress requests a normal
+browser Stop with reason `inactivity`; the browser follows its existing final
+audio/Stop path. The backend waits at most five seconds for that acknowledgement
+before best-effort cleanup, while retaining the separate five-second provider
+drain timeout. Inactivity after speech therefore produces the normal summary
+plus a neutral explanation; inactivity without speech produces the honest empty
+completion plus that explanation.
+
+### Why
+
+- Finalized provider timing is the only authoritative evidence available after
+  a session ends.
+- A small global summary is useful at presentation distance without inventing
+  semantic or provider-chunk groupings.
+- Ordering summary before `stopped` prevents the UI from presenting partial
+  completion data.
+- Timestamp progress avoids treating repeated unchanged hypotheses as speech.
+
+### Consequences
+
+- The initial MVP resolves OD-007 with **no transcript segments**. Segment
+  analysis remains post-MVP and must be added as a complete vertical feature,
+  not as retained unused chunk data.
+- Successful finalization has one protocol order: `summary`, then `stopped`.
+  Drain failures, protocol failures, and disconnects never emit a successful
+  summary.
+- The browser adapter accepts the server's `stop_requested` control message
+  and owns microphone/recorder shutdown just as it does for a user Stop.
+
+### Rationale summary
+
+> I calculate the final summary from one finalized speech timeline, not from
+> UI samples. That keeps every metric deterministic, makes pauses explicit, and
+> lets normal Stop and inactivity share the same reliable drain path.
+
+---
+
 # Open Decisions
 
 ## OD-006 — Yellow Pace Band
@@ -954,11 +1025,6 @@ red outside it. A yellow band is not justified by current evidence.
 
 ## OD-007 — Session Summary Grouping
 
-Need to decide how transcript/WPM history is grouped after Stop:
-
-- fixed time blocks;
-- provider-finalized chunks;
-- WPM-state-change blocks;
-- another simple deterministic grouping.
-
-Avoid semantic LLM grouping in the MVP unless clearly justified.
+**Closed by ADR-022.** The MVP ships a global deterministic summary without
+transcript grouping. Segment analysis is post-MVP work and must not leave
+partial chunk retention, a protocol field, or unused UI on `main`.

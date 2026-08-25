@@ -26,15 +26,23 @@ describe("live presentation state", () => {
       lifecycle: "starting",
       display: null,
       error: null,
+      pendingSummary: null,
+      completedSummary: null,
+      completionReason: null,
     });
   });
 
-  it("moves immediately through finalizing to completed", () => {
+  it("reveals a pending summary only when the following stopped event arrives", () => {
     const listening = reduceSession(INITIAL_STATE, { type: "listening" });
     const finalizing = reduceSession(listening, { type: "stop" });
+    const pending = reduceSession(finalizing, {
+      type: "summary",
+      summary: { averageSpeakingPace: 120, finalizedWords: 8, activeSpeakingSeconds: 4, presentationDurationSeconds: 4 },
+    });
 
     expect(finalizing.lifecycle).toBe("finalizing");
-    expect(reduceSession(finalizing, { type: "stopped" }).lifecycle).toBe(
+    expect(pending.completedSummary).toBeNull();
+    expect(reduceSession(pending, { type: "stopped", reason: "user" }).lifecycle).toBe(
       "completed",
     );
   });

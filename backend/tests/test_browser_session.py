@@ -17,7 +17,9 @@ def run(coroutine: Coroutine[Any, Any, Result]) -> Result:
     return asyncio.run(coroutine)
 
 
-def provider_result(word_count: int, *, duration: float = 4.0) -> dict[str, object]:
+def provider_result(
+    word_count: int, *, duration: float = 4.0, is_final: bool = False
+) -> dict[str, object]:
     word_duration = duration / word_count
     texts = [f"word-{index}" for index in range(word_count)]
     words = [
@@ -30,7 +32,7 @@ def provider_result(word_count: int, *, duration: float = 4.0) -> dict[str, obje
     ]
     return {
         "type": "Results",
-        "is_final": False,
+        "is_final": is_final,
         "channel": {"alternatives": [{"transcript": " ".join(texts), "words": words}]},
     }
 
@@ -66,6 +68,21 @@ class BlockingBrowser(FakeBrowser):
 class FailingSendBrowser(BlockingBrowser):
     async def send_json(self, message: object) -> None:
         raise OSError("browser closed with provider-secret")
+
+
+class InactivityBrowser(FakeBrowser):
+    def __init__(self) -> None:
+        super().__init__([])
+        self.stop_requested = asyncio.Event()
+
+    async def receive(self) -> dict[str, object]:
+        await self.stop_requested.wait()
+        return {"type": "websocket.receive", "text": '{"type":"stop"}'}
+
+    async def send_json(self, message: object) -> None:
+        await super().send_json(message)
+        if message == {"type": "stop_requested", "reason": "inactivity"}:
+            self.stop_requested.set()
 
 
 class FakeProvider:
@@ -122,7 +139,7 @@ def test_binary_audio_and_stop_drain_to_measurements_then_stopped() -> None:
         ]
     )
     provider = FakeProvider(
-        [provider_result(8), {"type": "Metadata", "request_id": "safe"}]
+        [provider_result(8, is_final=True), {"type": "Metadata", "request_id": "safe"}]
     )
 
     run(BrowserLiveWpmSession(browser, provider, drain_timeout_seconds=0.5).run())
@@ -140,7 +157,14 @@ def test_binary_audio_and_stop_drain_to_measurements_then_stopped() -> None:
             "audio_start_seconds": 0.0,
             "audio_end_seconds": 4.0,
         },
-        {"type": "stopped"},
+        {
+            "type": "summary",
+            "average_speaking_pace": 120.0,
+            "finalized_words": 8,
+            "active_speaking_seconds": 4.0,
+            "presentation_duration_seconds": 4.0,
+        },
+        {"type": "stopped", "reason": "user"},
     ]
 
 
@@ -163,8 +187,65 @@ def test_unavailable_measurement_is_null_and_unchanged_result_is_suppressed() ->
             "audio_start_seconds": 0.0,
             "audio_end_seconds": 0.5,
         },
-        {"type": "stopped"},
+        {
+            "type": "summary",
+            "average_speaking_pace": None,
+            "finalized_words": 0,
+            "active_speaking_seconds": 0.0,
+            "presentation_duration_seconds": 0.0,
+        },
+        {"type": "stopped", "reason": "user"},
     ]
+
+
+def test_inactivity_requests_browser_stop_then_emits_empty_completion() -> None:
+    browser = InactivityBrowser()
+    provider = FakeProvider([{"type": "Metadata", "request_id": "safe"}])
+
+    run(
+        BrowserLiveWpmSession(
+            browser,
+            provider,
+            inactivity_timeout_seconds=0.01,
+            stop_ack_timeout_seconds=0.5,
+            drain_timeout_seconds=0.5,
+        ).run()
+    )
+
+    assert browser.sent == [
+        {"type": "stop_requested", "reason": "inactivity"},
+        {
+            "type": "summary",
+            "average_speaking_pace": None,
+            "finalized_words": 0,
+            "active_speaking_seconds": 0.0,
+            "presentation_duration_seconds": 0.0,
+        },
+        {"type": "stopped", "reason": "inactivity"},
+    ]
+
+
+def test_missing_inactivity_stop_acknowledgement_is_a_safe_error() -> None:
+    browser = BlockingBrowser([])
+    provider = FakeProvider([], hang_after_events=True)
+
+    run(
+        BrowserLiveWpmSession(
+            browser,
+            provider,
+            inactivity_timeout_seconds=0.01,
+            stop_ack_timeout_seconds=0.01,
+            drain_timeout_seconds=0.5,
+        ).run()
+    )
+
+    assert browser.sent == [
+        {"type": "stop_requested", "reason": "inactivity"},
+        {"type": "error", "message": "Session protocol error"},
+    ]
+    assert browser.cancel_count == 1
+    assert provider.event_stream_cancel_count == 1
+    assert provider.close_count == 1
 
 
 def test_invalid_control_is_fatal_safe_and_cancels_provider_flow() -> None:

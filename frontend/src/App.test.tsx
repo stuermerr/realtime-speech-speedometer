@@ -40,7 +40,11 @@ describe("live speedometer product view", () => {
     expect(stop).toHaveBeenCalledOnce();
     expect(screen.getByText("FINALIZING…")).not.toBeNull();
 
-    act(() => emit({ type: "stopped" }));
+    act(() => emit({
+      type: "summary",
+      summary: { averageSpeakingPace: 120, finalizedWords: 8, activeSpeakingSeconds: 4, presentationDurationSeconds: 4 },
+    }));
+    act(() => emit({ type: "stopped", reason: "user" }));
     expect(screen.getByText("Presentation complete")).not.toBeNull();
     expect(
       screen.getByRole("button", { name: "Start new presentation" }),

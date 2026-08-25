@@ -84,7 +84,7 @@ export function App({ createSession = defaultSessionFactory }: AppProps) {
 
       <section className="session-controls" aria-label="Presentation controls">
         {state.lifecycle === "completed" && (
-          <p className="completion-title">Presentation complete</p>
+          <SessionSummaryView state={state} />
         )}
         {(state.lifecycle === "error" || state.lifecycle === "unsupported") && (
           <div role="alert" className="error-panel">
@@ -110,6 +110,34 @@ export function App({ createSession = defaultSessionFactory }: AppProps) {
       </section>
     </main>
   );
+}
+
+function SessionSummaryView({ state }: { readonly state: SessionState }) {
+  const summary = state.completedSummary;
+  if (summary === null) return null;
+  const inactive = state.completionReason === "inactivity";
+  if (summary.finalizedWords === 0) {
+    return <div className="summary" aria-live="polite">
+      <p className="completion-title">No speech was detected</p>
+      {inactive && <p className="summary-note">The presentation ended after five minutes without recognized speech.</p>}
+    </div>;
+  }
+  return <div className="summary" aria-live="polite">
+    <p className="completion-title">Presentation complete</p>
+    <dl className="summary-metrics">
+      <div><dt>Average WPM</dt><dd>{summary.averageSpeakingPace === null ? "—" : Math.round(summary.averageSpeakingPace)}</dd></div>
+      <div><dt>Words</dt><dd>{summary.finalizedWords}</dd></div>
+      <div><dt>Active speech</dt><dd>{formatDuration(summary.activeSpeakingSeconds)}</dd></div>
+      <div><dt>Presentation duration</dt><dd>{formatDuration(summary.presentationDurationSeconds)}</dd></div>
+    </dl>
+    {summary.averageSpeakingPace === null && <p className="summary-note">Average WPM needs at least four seconds of active speech.</p>}
+    {inactive && <p className="summary-note">The presentation ended after five minutes without recognized speech.</p>}
+  </div>;
+}
+
+function formatDuration(seconds: number): string {
+  const wholeSeconds = Math.round(seconds);
+  return `${Math.floor(wholeSeconds / 60)}:${String(wholeSeconds % 60).padStart(2, "0")}`;
 }
 
 function PaceScale({ state }: { readonly state: SessionState }) {
