@@ -64,7 +64,7 @@ With a valid `DEEPGRAM_API_KEY` and physical microphone:
 | Keyboard focus | PASS — Tab reaches Start; visible 3 px white outline with 4 px offset |
 | Console | PASS — no application errors or warnings |
 | Automated backend/frontend checks | PASS — see final implementation verification output |
-| Physical-distance readability | NOT RUN — requires an observer at the stated distances |
+| Physical-distance readability | PASS — user confirmed WPM/status readability at about 3 m and 5 m, with direction and marker clear at about 3 m |
 | Rewritten adapter with real microphone | PASS — two fresh headed-Chrome sessions completed through the Vite proxy and Deepgram; see evidence below |
 | Permission denial | PASS — Chrome reported `denied`, the UI showed a recoverable error, and no WebSocket/provider session opened |
 | Unsupported capability | PASS — the UI showed no retry and `getUserMedia` was not called |
@@ -102,5 +102,5 @@ failed before microphone access and exposed no retry. A real Chrome permission
 denial produced the expected recoverable message and did not open a WebSocket.
 
 The earlier transport-adapter evidence remains available in
-`docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md`. Physical-distance readability is the
-only remaining `NOT RUN` row for issue #16.
+`docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md`. All M5 product-acceptance rows have
+now passed.
