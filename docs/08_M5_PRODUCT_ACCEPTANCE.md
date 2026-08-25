@@ -65,11 +65,42 @@ With a valid `DEEPGRAM_API_KEY` and physical microphone:
 | Console | PASS — no application errors or warnings |
 | Automated backend/frontend checks | PASS — see final implementation verification output |
 | Physical-distance readability | NOT RUN — requires an observer at the stated distances |
-| Rewritten adapter with real microphone | NOT RUN — requires physical speech input and provider usage |
+| Rewritten adapter with real microphone | PASS — two fresh headed-Chrome sessions completed through the Vite proxy and Deepgram; see evidence below |
+| Permission denial | PASS — Chrome reported `denied`, the UI showed a recoverable error, and no WebSocket/provider session opened |
+| Unsupported capability | PASS — the UI showed no retry and `getUserMedia` was not called |
 
-The earlier transport adapter passed a real-microphone Start → speech → pause →
-resume → Stop → second-session run, recorded in
-`docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md`. That evidence remains valid for the
-unchanged backend transport and provider drain, but it is not reported as a
-pass for the rewritten M5 React browser adapter. Complete the two `NOT RUN`
-rows before closing issue #16.
+### Rewritten-adapter microphone evidence
+
+The headed Chrome run used the React adapter at `http://127.0.0.1:5173/`, with
+Vite proxying `/ws/live` to the diagnostic FastAPI server. Chrome exposed a
+real microphone and recorded `audio/webm;codecs=opus`.
+
+First session:
+
+- 104 ordered audio chunks, normally 4,846 bytes;
+- first available WPM at 6.00 seconds;
+- a 7.62-second speech-timeline gap retained the displayed WPM/status/marker;
+- resumed words updated the same session without reconnecting;
+- the final 2,897-byte recorder chunk arrived before Stop;
+- post-Stop Results were processed before Metadata, normal provider close,
+  `stopped`, and cleanup;
+- the completed UI retained 161 WPM with `TOO FAST` and `Slow down`.
+
+Second fresh session:
+
+- used a distinct browser/provider session ID;
+- began with unavailable measurements rather than carrying the first result;
+- first available WPM arrived at 6.81 seconds;
+- 34 ordered audio chunks completed through Stop, Metadata, normal provider
+  close, `stopped`, and cleanup;
+- the completed UI retained 213 WPM with matching red status, direction, and
+  marker position.
+
+Neither session produced a provider failure, protocol error, timeout, abnormal
+close, UI alert, or browser-console error. The unsupported-capability check
+failed before microphone access and exposed no retry. A real Chrome permission
+denial produced the expected recoverable message and did not open a WebSocket.
+
+The earlier transport-adapter evidence remains available in
+`docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md`. Physical-distance readability is the
+only remaining `NOT RUN` row for issue #16.
