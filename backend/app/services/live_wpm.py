@@ -25,6 +25,11 @@ class SessionWordState:
         """Return the complete current chronological word timeline."""
         return self._finalized_words + self._interim_words
 
+    @property
+    def finalized_words(self) -> tuple[RecognizedWord, ...]:
+        """Return the immutable provider-finalized timeline for session summary."""
+        return self._finalized_words
+
     def apply_result(self, result: ParsedDeepgramResult) -> bool:
         """Apply one atomic hypothesis and report a visible timeline change."""
         previous_words = self.words
@@ -56,6 +61,11 @@ class LiveWpmPipeline:
         if not self._word_state.apply_result(result):
             return None
         return self._calculator.calculate(self._word_state.words)
+
+    @property
+    def finalized_words(self) -> tuple[RecognizedWord, ...]:
+        """Expose only finalized evidence after provider drain."""
+        return self._word_state.finalized_words
 
     def process_event(
         self, payload: Mapping[str, object]

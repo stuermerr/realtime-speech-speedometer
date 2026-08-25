@@ -83,15 +83,23 @@ Open http://localhost:8000/ in current desktop Chrome or Chromium. Localhost is
 treated as a secure context for microphone access. Press Start, grant microphone
 permission, speak, then press Stop. The product keeps the most recent valid
 pace visible through pauses and waits for provider finalization before showing
-completion. The browser records
+completion. Completion shows a deterministic global summary: Average WPM,
+finalized words, active speech, and presentation duration. Empty presentations
+say `No speech was detected`; presentations below four seconds of active speech
+show their word/time metrics but leave Average WPM unavailable. The browser
+reveals this summary only after Deepgram has drained and the backend has sent
+ordered `summary` then `stopped` events. After five minutes without recognized
+speech progress it requests the same graceful finalization and explains the
+inactivity ending. The browser records
 `audio/webm;codecs=opus`; unsupported browsers fail before requesting the
 microphone. A clean stopped state is shown only after Deepgram drains the final
 audio, emits Metadata, and closes normally.
 
 The browser never receives the Deepgram credential. See the
 [transport acceptance procedure](docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md) and
-[product acceptance procedure](docs/08_M5_PRODUCT_ACCEPTANCE.md) for the
-reproducible real-browser checks.
+[product acceptance procedure](docs/08_M5_PRODUCT_ACCEPTANCE.md), and the
+[M6 summary acceptance procedure](docs/09_M6_SESSION_SUMMARY_ACCEPTANCE.md)
+for the reproducible real-browser checks.
 
 Use `--directory backend` for root-level commands. `--project backend` selects
 the backend environment but does not change the command's working directory,
@@ -156,6 +164,11 @@ WPM clock. FastAPI forwards the containerized `audio/webm;codecs=opus` bytes
 without transcoding. WPM is calculated from Deepgram's word timestamps on the
 audio timeline, never from network receive time. During a pause no changed word
 timeline is emitted, so the UI retains the last valid WPM value.
+
+At finalization, the immutable finalized-word timeline goes separately to
+`SessionSummaryCalculator`. It reuses the active-speech gap policy, calculates
+presentation duration from first word start to last word end, and emits the
+unrounded summary metrics. It never averages the rolling live WPM values.
 
 ## Product and architecture
 
