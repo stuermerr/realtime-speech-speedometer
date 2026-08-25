@@ -10,11 +10,11 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
 from typing import Literal, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from app.services.deepgram_transcription import DeepgramError, parse_deepgram_event
 from app.services.live_wpm import LiveWpmPipeline
-from app.services.wpm import WpmMeasurement
+from app.services.wpm import PaceStatus, WpmMeasurement, classify_pace
 
 
 _diagnostic_logger = logging.getLogger("uvicorn.error.speech_speedometer.live_wpm")
@@ -104,15 +104,23 @@ class _MeasurementMessage(BaseModel):
 
     type: Literal["measurement"] = "measurement"
     wpm: float | None
+    pace_status: PaceStatus | None
     word_count: int
     active_speech_seconds: float
     audio_start_seconds: float | None
     audio_end_seconds: float | None
 
+    @model_validator(mode="after")
+    def validate_pace_availability(self) -> Self:
+        if (self.wpm is None) != (self.pace_status is None):
+            raise ValueError("WPM and pace status availability must match")
+        return self
+
     @classmethod
     def from_measurement(cls, measurement: WpmMeasurement) -> _MeasurementMessage:
         return cls(
             wpm=measurement.wpm,
+            pace_status=classify_pace(measurement.wpm),
             word_count=measurement.word_count,
             active_speech_seconds=measurement.active_speech_seconds,
             audio_start_seconds=measurement.audio_start_seconds,

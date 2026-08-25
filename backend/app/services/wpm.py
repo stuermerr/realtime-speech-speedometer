@@ -5,6 +5,17 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Literal
+
+
+PaceStatus = Literal["green", "red"]
+
+
+def classify_pace(wpm: float | None) -> PaceStatus | None:
+    """Classify an available raw pace against the inclusive target range."""
+    if wpm is None:
+        return None
+    return "green" if 115.0 <= wpm <= 150.0 else "red"
 
 
 @dataclass(frozen=True, slots=True)
