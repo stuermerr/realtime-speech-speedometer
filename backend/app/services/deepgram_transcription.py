@@ -82,6 +82,7 @@ class ParsedDeepgramResult:
     """One complete provider hypothesis normalized to application words."""
 
     is_final: bool
+    text: str
     words: tuple[RecognizedWord, ...]
 
 
@@ -313,6 +314,7 @@ def parse_deepgram_event(
     )
     return ParsedDeepgramResult(
         is_final=result.is_final,
+        text=alternative.transcript,
         words=tuple(
             RecognizedWord(
                 text=word.word,

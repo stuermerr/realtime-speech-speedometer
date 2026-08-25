@@ -11,6 +11,7 @@ from app.services.deepgram_transcription import (
     parse_deepgram_event,
 )
 from app.services.wpm import ActiveSpeechWpm, RecognizedWord, WpmMeasurement
+from app.services.session_summary import FinalizedChunk
 
 
 class SessionWordState:
@@ -19,6 +20,7 @@ class SessionWordState:
     def __init__(self) -> None:
         self._finalized_words: tuple[RecognizedWord, ...] = ()
         self._interim_words: tuple[RecognizedWord, ...] = ()
+        self._finalized_chunks: tuple[FinalizedChunk, ...] = ()
 
     @property
     def words(self) -> tuple[RecognizedWord, ...]:
@@ -29,6 +31,10 @@ class SessionWordState:
     def finalized_words(self) -> tuple[RecognizedWord, ...]:
         """Return the immutable provider-finalized timeline for session summary."""
         return self._finalized_words
+
+    @property
+    def finalized_chunks(self) -> tuple[FinalizedChunk, ...]:
+        return self._finalized_chunks
 
     def apply_result(self, result: ParsedDeepgramResult) -> bool:
         """Apply one atomic hypothesis and report a visible timeline change."""
@@ -44,6 +50,8 @@ class SessionWordState:
         _validate_candidate(candidate_words)
         self._finalized_words = candidate_finalized
         self._interim_words = candidate_interim
+        if result.is_final and result.words:
+            self._finalized_chunks += (FinalizedChunk(result.text, result.words),)
         return self.words != previous_words
 
 
@@ -66,6 +74,10 @@ class LiveWpmPipeline:
     def finalized_words(self) -> tuple[RecognizedWord, ...]:
         """Expose only finalized evidence after provider drain."""
         return self._word_state.finalized_words
+
+    @property
+    def finalized_chunks(self) -> tuple[FinalizedChunk, ...]:
+        return self._word_state.finalized_chunks
 
     def process_event(
         self, payload: Mapping[str, object]

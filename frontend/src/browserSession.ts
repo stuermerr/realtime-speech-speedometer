@@ -1,4 +1,4 @@
-import type { PaceStatus, SessionAction, SessionSummary } from "./state";
+import type { PaceStatus, SessionAction, SessionSummary, SummarySegment } from "./state";
 
 const MIME_TYPE = "audio/webm;codecs=opus";
 const CHUNK_MILLISECONDS = 250;
@@ -269,13 +269,33 @@ function parseSummary(value: Record<string, unknown>): SessionSummary {
   const finalizedWords = value.finalized_words;
   const activeSpeakingSeconds = value.active_speaking_seconds;
   const presentationDurationSeconds = value.presentation_duration_seconds;
+  const rawSegments = value.segments;
   if (
     !(averageSpeakingPace === null || (typeof averageSpeakingPace === "number" && Number.isFinite(averageSpeakingPace)))
     || !isNonNegativeInteger(finalizedWords)
     || !isNonNegativeFinite(activeSpeakingSeconds)
     || !isNonNegativeFinite(presentationDurationSeconds)
+    || !Array.isArray(rawSegments)
   ) throw new Error("Invalid summary");
-  return { averageSpeakingPace, finalizedWords, activeSpeakingSeconds, presentationDurationSeconds };
+  const segments = rawSegments.map(parseSegment);
+  return {
+    averageSpeakingPace, finalizedWords, activeSpeakingSeconds,
+    presentationDurationSeconds, segments,
+  };
+}
+
+function parseSegment(value: unknown): SummarySegment {
+  if (!isRecord(value)) throw new Error("Invalid segment");
+  const text = value.text;
+  const averageSpeakingPace = value.average_speaking_pace;
+  const paceStatus = value.pace_status;
+  if (
+    typeof text !== "string" || text.trim().length === 0
+    || !(averageSpeakingPace === null || isNonNegativeFinite(averageSpeakingPace))
+    || !(paceStatus === null || paceStatus === "green" || paceStatus === "red")
+    || (averageSpeakingPace === null) !== (paceStatus === null)
+  ) throw new Error("Invalid segment");
+  return { text, averageSpeakingPace, paceStatus };
 }
 
 function isNonNegativeFinite(value: unknown): value is number {

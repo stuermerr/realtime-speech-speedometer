@@ -102,9 +102,16 @@ def test_live_websocket_owns_a_fresh_provider_for_each_session() -> None:
                 "type": "summary",
                 "average_speaking_pace": None,
                 "finalized_words": 1,
-                "active_speaking_seconds": 0.5,
-                "presentation_duration_seconds": 0.5,
-            }
+                    "active_speaking_seconds": 0.5,
+                    "presentation_duration_seconds": 0.5,
+                    "segments": [
+                        {
+                            "text": "fresh",
+                            "average_speaking_pace": None,
+                            "pace_status": None,
+                        }
+                    ],
+                }
             assert websocket.receive_json() == {"type": "stopped", "reason": "user"}
 
     assert len(providers) == 2

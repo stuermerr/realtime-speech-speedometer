@@ -116,7 +116,7 @@ describe("browser session adapter", () => {
     expect(browser.socket.sent[2]).toBe(JSON.stringify({ type: "stop" }));
 
     browser.socket.dispatchEvent(
-      new MessageEvent("message", { data: JSON.stringify({ type: "summary", average_speaking_pace: null, finalized_words: 0, active_speaking_seconds: 0, presentation_duration_seconds: 0 }) }),
+      new MessageEvent("message", { data: JSON.stringify({ type: "summary", average_speaking_pace: null, finalized_words: 0, active_speaking_seconds: 0, presentation_duration_seconds: 0, segments: [] }) }),
     );
     browser.socket.dispatchEvent(
       new MessageEvent("message", { data: JSON.stringify({ type: "stopped", reason: "user" }) }),
@@ -132,6 +132,7 @@ describe("browser session adapter", () => {
         finalizedWords: 0,
         activeSpeakingSeconds: 0,
         presentationDurationSeconds: 0,
+        segments: [],
       },
     });
     expect(events).toContainEqual({ type: "stopped", reason: "user" });
@@ -188,6 +189,36 @@ describe("browser session adapter", () => {
     });
     expect(browser.stopTrack).toHaveBeenCalledTimes(1);
     expect(browser.socket.closeCount).toBe(1);
+  });
+
+  it("parses complete segments atomically and rejects a malformed segment", async () => {
+    const validBrowser = runtime();
+    const validEvents: SessionAction[] = [];
+    await new BrowserSession(validEvents.push.bind(validEvents), validBrowser.value).start();
+    validBrowser.socket.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({
+      type: "summary", average_speaking_pace: 120, finalized_words: 8,
+      active_speaking_seconds: 4, presentation_duration_seconds: 4,
+      segments: [{ text: "Complete sentence.", average_speaking_pace: 120.4, pace_status: "green" }],
+    }) }));
+
+    expect(validEvents.at(-1)).toEqual({ type: "summary", summary: {
+      averageSpeakingPace: 120, finalizedWords: 8, activeSpeakingSeconds: 4,
+      presentationDurationSeconds: 4,
+      segments: [{ text: "Complete sentence.", averageSpeakingPace: 120.4, paceStatus: "green" }],
+    } });
+
+    const invalidBrowser = runtime();
+    const invalidEvents: SessionAction[] = [];
+    await new BrowserSession(invalidEvents.push.bind(invalidEvents), invalidBrowser.value).start();
+    invalidBrowser.socket.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({
+      type: "summary", average_speaking_pace: 120, finalized_words: 8,
+      active_speaking_seconds: 4, presentation_duration_seconds: 4,
+      segments: [{ text: "Broken", average_speaking_pace: 120 }],
+    }) }));
+
+    expect(invalidEvents.at(-1)).toEqual({
+      type: "fail", message: "The live session sent an invalid message.",
+    });
   });
 
   it("releases a microphone that arrives after startup was cleaned up", async () => {

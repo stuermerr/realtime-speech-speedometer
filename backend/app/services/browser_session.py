@@ -18,7 +18,11 @@ from app.services.deepgram_transcription import (
     parse_deepgram_event,
 )
 from app.services.live_wpm import LiveWpmPipeline
-from app.services.session_summary import SessionSummary, SessionSummaryCalculator
+from app.services.session_summary import (
+    SessionSummary,
+    SessionSummaryCalculator,
+    SummarySegment,
+)
 from app.services.wpm import PaceStatus, WpmMeasurement, classify_pace
 
 
@@ -146,6 +150,7 @@ class _SummaryMessage(BaseModel):
     finalized_words: int
     active_speaking_seconds: float
     presentation_duration_seconds: float
+    segments: tuple[SummarySegment, ...]
 
     @classmethod
     def from_summary(cls, summary: SessionSummary) -> Self:
@@ -154,6 +159,7 @@ class _SummaryMessage(BaseModel):
             finalized_words=summary.finalized_words,
             active_speaking_seconds=summary.active_speaking_seconds,
             presentation_duration_seconds=summary.presentation_duration_seconds,
+            segments=summary.segments,
         )
 
 
@@ -413,7 +419,7 @@ class BrowserLiveWpmSession:
             self._last_recognized_progress_at = self._clock()
 
     async def _send_completion(self, reason: Literal["user", "inactivity"]) -> None:
-        summary = self._summary_calculator.build(self._pipeline.finalized_words)
+        summary = self._summary_calculator.build(self._pipeline.finalized_chunks)
         await self._send(_SummaryMessage.from_summary(summary))
         await self._send(_StoppedMessage(reason=reason))
         self._diagnostics.record("browser", "stopped_sent", reason=reason)
