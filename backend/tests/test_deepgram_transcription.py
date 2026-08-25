@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Any, TypeVar, cast
 
 import pytest
+from websockets.exceptions import ConnectionClosedError
 
 from app.core.config import DeepgramSettings
 from app.services.deepgram_transcription import (
     DEEPGRAM_WEBSOCKET_URL,
+    DeepgramAudioMode,
     DeepgramConnectionError,
     DeepgramProtocolError,
     DeepgramServiceError,
@@ -50,6 +52,16 @@ class FakeConnection:
 
     async def close(self) -> None:
         self.close_count += 1
+
+
+class AbnormallyClosingConnection(FakeConnection):
+    def __aiter__(self) -> AsyncIterator[str | bytes]:
+        async def messages() -> AsyncIterator[str | bytes]:
+            if False:
+                yield ""
+            raise ConnectionClosedError(None, None)
+
+        return messages()
 
 
 class FakeConnector:
@@ -96,6 +108,29 @@ def test_session_opens_proven_nova_3_configuration_without_exposing_key() -> Non
     )
     assert connector.headers == {"Authorization": "Token deepgram-secret"}
     assert "deepgram-secret" not in representation
+
+
+def test_session_opens_containerized_webm_without_raw_audio_parameters() -> None:
+    async def scenario() -> FakeConnector:
+        connector = FakeConnector(FakeConnection())
+        session = DeepgramTranscriptionSession(
+            SETTINGS,
+            audio_mode=DeepgramAudioMode.WEBM_OPUS,
+            connector=connector,
+        )
+        await session.open()
+        return connector
+
+    connector = run(scenario())
+
+    assert connector.url == (
+        f"{DEEPGRAM_WEBSOCKET_URL}?model=nova-3&language=de"
+        "&interim_results=true&punctuate=true&smart_format=true"
+        "&vad_events=true&endpointing=600&utterance_end_ms=1000"
+    )
+    assert "encoding=" not in connector.url
+    assert "sample_rate=" not in connector.url
+    assert "channels=" not in connector.url
 
 
 def test_session_sends_audio_closes_stream_and_closes_connection() -> None:
@@ -161,6 +196,19 @@ def test_connection_failure_is_typed_and_secret_safe() -> None:
     assert "deepgram-secret" not in str(caught.value)
     assert caught.value.__cause__ is None
     assert caught.value.__context__ is None
+
+
+def test_abnormal_provider_close_is_a_connection_failure() -> None:
+    async def scenario() -> None:
+        session = DeepgramTranscriptionSession(
+            SETTINGS,
+            connector=FakeConnector(AbnormallyClosingConnection()),
+        )
+        await session.open()
+        _ = [event async for event in session.provider_events()]
+
+    with pytest.raises(DeepgramConnectionError, match="event stream failed"):
+        run(scenario())
 
 
 def test_sanitized_results_preserve_atomic_interim_revision_and_finalization() -> None:

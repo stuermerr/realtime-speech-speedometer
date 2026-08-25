@@ -54,6 +54,25 @@ class DeepgramSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class LiveWpmDebugSettings:
+    """Opt-in diagnostics for local browser-to-WPM sessions."""
+
+    enabled: bool = False
+
+    @classmethod
+    def from_environment(
+        cls, environment: Mapping[str, str] | None = None
+    ) -> LiveWpmDebugSettings:
+        if environment is None:
+            environment = load_backend_environment()
+
+        value = environment.get("LIVE_WPM_DEBUG", "false").strip().lower()
+        if value not in {"true", "false"}:
+            raise ConfigurationError("LIVE_WPM_DEBUG must be true or false")
+        return cls(enabled=value == "true")
+
+
+@dataclass(frozen=True, slots=True)
 class AzureSettings:
     endpoint: str
     api_key: str = field(repr=False)

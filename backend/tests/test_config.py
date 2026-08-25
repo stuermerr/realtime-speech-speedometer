@@ -8,6 +8,7 @@ from app.core.config import (
     AzureSettings,
     ConfigurationError,
     DeepgramSettings,
+    LiveWpmDebugSettings,
     load_backend_environment,
 )
 
@@ -59,17 +60,14 @@ def test_settings_load_valid_azure_configuration() -> None:
     assert settings.endpoint == "https://speech.example.openai.azure.com"
     assert settings.deployment == "live-transcribe"
     assert settings.websocket_url == (
-        "wss://speech.example.openai.azure.com/openai/v1/realtime"
-        "?intent=transcription"
+        "wss://speech.example.openai.azure.com/openai/v1/realtime?intent=transcription"
     )
 
 
 def test_settings_accept_azure_openai_v1_base_url() -> None:
     environment = {
         **VALID_ENV,
-        "AZURE_OPENAI_ENDPOINT": (
-            "https://speech.example.openai.azure.com/openai/v1"
-        ),
+        "AZURE_OPENAI_ENDPOINT": ("https://speech.example.openai.azure.com/openai/v1"),
     }
 
     settings = AzureSettings.from_environment(environment)
@@ -130,3 +128,18 @@ def test_missing_deepgram_api_key_reports_only_variable_name() -> None:
     assert str(caught.value) == (
         "Missing required Deepgram configuration: DEEPGRAM_API_KEY"
     )
+
+
+def test_live_wpm_debug_logging_is_disabled_by_default() -> None:
+    settings = LiveWpmDebugSettings.from_environment({})
+
+    assert settings.enabled is False
+
+
+def test_live_wpm_debug_logging_requires_explicit_boolean_value() -> None:
+    assert LiveWpmDebugSettings.from_environment({"LIVE_WPM_DEBUG": "true"}).enabled
+
+    with pytest.raises(ConfigurationError) as caught:
+        LiveWpmDebugSettings.from_environment({"LIVE_WPM_DEBUG": "provider-secret"})
+
+    assert str(caught.value) == "LIVE_WPM_DEBUG must be true or false"

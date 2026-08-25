@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Speech Speedometer Debug</title>
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #111827; color: #f9fafb; }
+      main { width: min(42rem, calc(100% - 3rem)); text-align: center; }
+      #wpm { font-size: clamp(4rem, 18vw, 10rem); font-variant-numeric: tabular-nums; margin: 1rem 0; }
+      #status { min-height: 3rem; color: #d1d5db; }
+      button { font: inherit; font-weight: 700; padding: .8rem 1.5rem; margin: .4rem; border: 0; border-radius: .5rem; cursor: pointer; }
+      button:disabled { cursor: not-allowed; opacity: .45; }
+      #start { background: #10b981; color: #052e16; }
+      #stop { background: #ef4444; color: white; }
+    </style>
+  </head>
+  <body>
+    <main data-state="idle">
+      <h1>Speech Speedometer</h1>
+      <p id="wpm" aria-live="polite">WPM: —</p>
+      <p id="status" role="status">Idle. Press Start when you are ready.</p>
+      <button id="start" type="button">Start</button>
+      <button id="stop" type="button" disabled>Stop</button>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

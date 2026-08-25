@@ -207,6 +207,25 @@ The reason is architectural fit:
 > Deepgram returns the recognized words and the audio-timeline timing needed by the product in the same realtime stream, eliminating an otherwise separate speech-timing subsystem.
 
 This is the evidence supporting the provider decision.
+
+## Browser WebM/Opus Follow-Up
+
+On 2026-08-24, the Milestone 4 local browser adapter was exercised with Google
+Chrome 149 on Linux using the machine's default physical microphone source.
+Chrome produced `audio/webm;codecs=opus` chunks (2,442 bytes initially and
+approximately 4,845–4,846 bytes thereafter), which FastAPI forwarded to
+Deepgram Nova-3 without transcoding or raw-audio query parameters.
+
+Two silent capture sessions sent `CloseStream`, received `Metadata`, observed a
+normal provider close, and only then reached the backend-gated `stopped` state.
+No credentials, raw provider payloads, audio contents, or transcript text were
+captured. This validates container transport and clean drain behavior, but not
+speech latency, pause/resume WPM behavior, or preservation of a spoken final
+phrase; those checks still require a human utterance through the microphone.
+
+See `docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md` for the reproducible procedure and
+the complete partial result.
+
 ## Reproduction
 
 From `backend/`:
