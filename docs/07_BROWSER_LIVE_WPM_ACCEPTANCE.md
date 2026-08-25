@@ -25,6 +25,33 @@ uv run --directory backend uvicorn app.main:app --reload
 
 Open http://localhost:8000/ in a fresh browser tab.
 
+## Secret-safe diagnostic capture
+
+Additional live-session diagnostics are disabled by default. For a local
+diagnosis, start the backend with the one opt-in setting and capture both
+standard output and standard error:
+
+```bash
+LIVE_WPM_DEBUG=true uv run --directory backend uvicorn app.main:app 2>&1 \
+  | tee /tmp/speech-speedometer-live-wpm-debug.log
+```
+
+Each diagnostic message is JSON with a session-local `session_id`, monotonic
+`relative_seconds`, `stage`, and `event`. Records include byte sizes, safe
+Deepgram event metadata, WPM processing decisions, Stop/drain outcomes, and
+cleanup. They intentionally omit audio, transcript text, raw provider payloads,
+credentials, headers, device identifiers, and exception details.
+
+Stop the server after reproducing the problem, inspect or share only the
+needed capture, then remove the temporary file:
+
+```bash
+rm -f /tmp/speech-speedometer-live-wpm-debug.log
+```
+
+Omit `LIVE_WPM_DEBUG=true` for normal sessions. If the setting is placed in
+`backend/.env` instead, set it back to `false` after diagnosis.
+
 ## Procedure
 
 1. Record the browser version, operating system, and selected microphone below.
