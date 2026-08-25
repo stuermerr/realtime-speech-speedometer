@@ -51,14 +51,11 @@ class SessionSummaryCalculator:
     def build(self, finalized_chunks: Iterable[FinalizedChunk]) -> SessionSummary:
         """Calculate global metrics and segments from immutable final chunks."""
         chunks = tuple(finalized_chunks)
-        words = tuple(word for chunk in chunks for word in chunk.words)
+        words = _flatten_words(chunks)
         if not words:
             return SessionSummary(None, 0, 0.0, 0.0, ())
 
-        active_seconds = active_speech_duration(words, self._pause_threshold_seconds)
-        average_pace = None
-        if active_seconds >= self._minimum_active_seconds:
-            average_pace = len(words) * 60 / active_seconds
+        active_seconds, average_pace = self._calculate_pace_metrics(words)
         return SessionSummary(
             average_speaking_pace=average_pace,
             finalized_words=len(words),
@@ -87,17 +84,26 @@ class SessionSummaryCalculator:
         return tuple(self._segment(group) for group in groups)
 
     def _active_seconds(self, chunks: Iterable[FinalizedChunk]) -> float:
-        words = tuple(word for chunk in chunks for word in chunk.words)
-        return active_speech_duration(words, self._pause_threshold_seconds)
+        return self._calculate_pace_metrics(_flatten_words(chunks))[0]
 
     def _segment(self, chunks: tuple[FinalizedChunk, ...]) -> SummarySegment:
-        words = tuple(word for chunk in chunks for word in chunk.words)
-        active_seconds = active_speech_duration(words, self._pause_threshold_seconds)
-        average_pace = None
-        if active_seconds >= self._minimum_active_seconds:
-            average_pace = len(words) * 60 / active_seconds
+        words = _flatten_words(chunks)
+        _, average_pace = self._calculate_pace_metrics(words)
         return SummarySegment(
             text=" ".join(chunk.text.strip() for chunk in chunks if chunk.text.strip()),
             average_speaking_pace=average_pace,
             pace_status=classify_pace(average_pace),
         )
+
+    def _calculate_pace_metrics(
+        self, words: tuple[RecognizedWord, ...]
+    ) -> tuple[float, float | None]:
+        active_seconds = active_speech_duration(words, self._pause_threshold_seconds)
+        average_pace = None
+        if active_seconds >= self._minimum_active_seconds:
+            average_pace = len(words) * 60 / active_seconds
+        return active_seconds, average_pace
+
+
+def _flatten_words(chunks: Iterable[FinalizedChunk]) -> tuple[RecognizedWord, ...]:
+    return tuple(word for chunk in chunks for word in chunk.words)

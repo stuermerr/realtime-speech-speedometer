@@ -87,7 +87,8 @@ completion. Completion replaces the dominant live reading with a scrollable
 summary containing Average WPM, finalized words, active speech, presentation
 duration, and the complete chronological transcript grouped into deterministic
 pace segments. Each segment shows rounded WPM, an On pace/Too slow/Too fast
-label, and a compact marker on the same fixed pace scale. Empty presentations
+label, and a compact marker on the same fixed pace scale, with transcript text
+in the left column and pace analysis in the right column on desktop. Empty presentations
 say `No speech was detected`; presentations below four seconds of active speech
 show their word/time metrics but leave Average WPM unavailable. The browser
 reveals this summary only after Deepgram has drained and the backend has sent

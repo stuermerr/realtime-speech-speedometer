@@ -167,8 +167,11 @@ as chronological pace segments. These segments preserve non-empty Deepgram
 final-chunk boundaries, combine adjacent chunks until at least four active
 speech seconds when possible, and never split a provider chunk. Each available
 segment carries its own deterministic unrounded Average WPM and backend
-red/green classification. A short presentation produces one segment with pace
-unavailable; an empty presentation produces no segments.
+red/green classification. Each segment uses a vertical text/pace split:
+transcript copy occupies the left column and compact pace analysis the right,
+falling back to a stack only on narrow screens. A short presentation produces
+one segment with pace unavailable and an explicitly neutral marker; an empty
+presentation produces no segments while retaining the four global metrics.
 
 After successful finalization, Completed is a content-oriented, vertically
 scrollable view containing the global metrics, transcript pace recap, optional

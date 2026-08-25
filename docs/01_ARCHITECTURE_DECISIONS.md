@@ -1050,7 +1050,10 @@ timelines.
 After ordered `summary` then `stopped`, React switches from the viewport-sized
 Live layout to a vertically scrollable Completed layout. It shows global
 metrics followed by every transcript segment and a compact variant of the
-shared value-driven pace scale. React rounds WPM for display, presents backend
+shared value-driven pace scale. Each desktop segment is vertically divided
+into transcript text on the left and pace analysis on the right; narrow screens
+stack those regions. An unavailable segment uses a visibly neutral marker that
+does not imply a pace classification. React rounds WPM for display, presents backend
 `green` as `On pace`, and derives `Too slow` or `Too fast` only when the backend
 sent `red`. The Completed layout omits the live reading and full-size scale.
 

@@ -119,44 +119,42 @@ function CompletedView({
   const summary = state.completedSummary;
   if (summary === null) return null;
   const inactive = state.completionReason === "inactivity";
-  if (summary.finalizedWords === 0) {
-    return <section className="completed-view" aria-live="polite">
-      <p className="completion-title">No speech was detected</p>
-      {inactive && <p className="summary-note">The presentation ended after five minutes without recognized speech.</p>}
-      <button className="primary-button" type="button" onClick={start}>Start new presentation</button>
-    </section>;
-  }
+  const empty = summary.finalizedWords === 0;
   return <section className="completed-view" aria-live="polite">
     <div className="summary">
-    <p className="completion-title">Presentation complete</p>
+    <p className="completion-title">{empty ? "No speech was detected" : "Presentation complete"}</p>
     <dl className="summary-metrics">
       <div><dt>Average WPM</dt><dd>{summary.averageSpeakingPace === null ? "—" : Math.round(summary.averageSpeakingPace)}</dd></div>
       <div><dt>Words</dt><dd>{summary.finalizedWords}</dd></div>
       <div><dt>Active speech</dt><dd>{formatDuration(summary.activeSpeakingSeconds)}</dd></div>
       <div><dt>Presentation duration</dt><dd>{formatDuration(summary.presentationDurationSeconds)}</dd></div>
     </dl>
-    {summary.averageSpeakingPace === null && <p className="summary-note">Average WPM needs at least four seconds of active speech.</p>}
+    {!empty && summary.averageSpeakingPace === null && <p className="summary-note">Average WPM needs at least four seconds of active speech.</p>}
     {inactive && <p className="summary-note">The presentation ended after five minutes without recognized speech.</p>}
     </div>
-    <section className="segment-recap" aria-labelledby="pace-transcript-heading">
+    {!empty && <section className="segment-recap" aria-labelledby="pace-transcript-heading">
       <h2 id="pace-transcript-heading">Pace transcript</h2>
       <ol className="segment-list">
         {summary.segments.map((segment, index) => (
           <li className="summary-segment" key={index}>
-            <p className="segment-text">{segment.text}</p>
-            <div className="segment-pace">
-              <span className="segment-value">
-                {segment.averageSpeakingPace === null ? "—" : Math.round(segment.averageSpeakingPace)} WPM
-              </span>
-              <span data-pace={segment.paceStatus ?? "neutral"}>
-                {segmentLabel(segment.averageSpeakingPace, segment.paceStatus)}
-              </span>
+            <div className="segment-copy">
+              <p className="segment-text">{segment.text}</p>
             </div>
-            <PaceScale value={segment.averageSpeakingPace} variant="compact" index={index + 1} />
+            <div className="segment-analysis">
+              <div className="segment-pace">
+                <span className="segment-value">
+                  {segment.averageSpeakingPace === null ? "—" : Math.round(segment.averageSpeakingPace)} WPM
+                </span>
+                <span data-pace={segment.paceStatus ?? "neutral"}>
+                  {segmentLabel(segment.averageSpeakingPace, segment.paceStatus)}
+                </span>
+              </div>
+              <PaceScale value={segment.averageSpeakingPace} variant="compact" index={index + 1} />
+            </div>
           </li>
         ))}
       </ol>
-    </section>
+    </section>}
     <button className="primary-button" type="button" onClick={start}>Start new presentation</button>
   </section>;
 }
@@ -173,7 +171,9 @@ function PaceScale({
   readonly variant: "live" | "compact";
   readonly index?: number;
 }) {
-  const marker = value === null ? null : markerPosition(value);
+  const available = value !== null;
+  const showMarker = available || variant === "compact";
+  const markerPositionStyle = available ? { left: `${markerPosition(value)}%` } : undefined;
   const targetStart = scalePosition(PACE_SCALE.targetMinimum);
   const targetEnd = scalePosition(PACE_SCALE.targetMaximum);
   const scaleStyle = {
@@ -192,12 +192,15 @@ function PaceScale({
     >
       <div className="scale-track">
         <div className="target-zone" aria-hidden="true" />
-        {marker !== null && (
+        {showMarker && (
           <div
             className="pace-marker"
             data-testid={variant === "compact" ? "compact-pace-marker" : "pace-marker"}
-            style={{ left: `${marker}%` }}
-            aria-label={`${variant === "compact" ? "Segment" : "Current"} pace ${Math.round(value ?? 0)} words per minute`}
+            data-available={available}
+            style={markerPositionStyle}
+            aria-label={available
+              ? `${variant === "compact" ? "Segment" : "Current"} pace ${Math.round(value)} words per minute`
+              : "Segment pace unavailable"}
           />
         )}
       </div>
@@ -215,9 +218,10 @@ function PaceScale({
 }
 
 function segmentLabel(wpm: number | null, status: "green" | "red" | null): string {
-  if (wpm === null || status === null) return "Pace unavailable";
-  if (status === "green") return "On pace";
-  return wpm < PACE_SCALE.targetMinimum ? "Too slow" : "Too fast";
+  const category = paceCategory(wpm, status);
+  if (category === "unavailable") return "Pace unavailable";
+  if (category === "on-pace") return "On pace";
+  return category === "too-slow" ? "Too slow" : "Too fast";
 }
 
 function pacePresentation(state: SessionState): { status: string; direction: string } {
@@ -225,10 +229,11 @@ function pacePresentation(state: SessionState): { status: string; direction: str
     return { status: "FINALIZING…", direction: "Finishing the live transcript" };
   }
   if (state.display !== null) {
-    if (state.display.paceStatus === "green") {
+    const category = paceCategory(state.display.wpm, state.display.paceStatus);
+    if (category === "on-pace") {
       return { status: "ON PACE", direction: "Keep this rhythm" };
     }
-    return state.display.wpm < PACE_SCALE.targetMinimum
+    return category === "too-slow"
       ? { status: "TOO SLOW", direction: "Pick up the pace" }
       : { status: "TOO FAST", direction: "Slow down" };
   }
@@ -239,4 +244,13 @@ function pacePresentation(state: SessionState): { status: string; direction: str
     return { status: "COMPLETE", direction: "Your final pace is held above" };
   }
   return { status: "READY", direction: "Press Start when you are ready" };
+}
+
+function paceCategory(
+  wpm: number | null,
+  status: "green" | "red" | null,
+): "unavailable" | "on-pace" | "too-slow" | "too-fast" {
+  if (wpm === null || status === null) return "unavailable";
+  if (status === "green") return "on-pace";
+  return wpm < PACE_SCALE.targetMinimum ? "too-slow" : "too-fast";
 }

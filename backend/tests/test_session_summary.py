@@ -41,8 +41,10 @@ def test_short_and_empty_summaries_are_honest() -> None:
 
 def test_segments_group_final_chunks_and_merge_a_short_remainder_backward() -> None:
     chunks = (
-        FinalizedChunk("  First, chunk.  ", (word(0, 0.0, 2.0), word(1, 2.0, 4.0))),
-        FinalizedChunk("Second chunk!", (word(2, 6.0, 8.0), word(3, 8.0, 10.0))),
+        FinalizedChunk("  First,  ", (word(0, 0.0, 2.0),)),
+        FinalizedChunk("chunk.  ", (word(1, 2.0, 4.0),)),
+        FinalizedChunk("Second", (word(2, 6.0, 8.0),)),
+        FinalizedChunk("chunk!", (word(3, 8.0, 10.0),)),
         FinalizedChunk("Tail?", (word(4, 12.0, 12.5),)),
     )
 
