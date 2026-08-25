@@ -1,4 +1,10 @@
 export type PaceStatus = "green" | "red";
+export const PACE_SCALE = {
+  minimum: 60,
+  targetMinimum: 115,
+  targetMaximum: 150,
+  maximum: 220,
+} as const;
 export type Lifecycle =
   | "idle"
   | "starting"
@@ -76,7 +82,14 @@ export function reduceSession(
 }
 
 export function markerPosition(wpm: number): number {
-  return Math.min(100, Math.max(0, ((wpm - 60) / (220 - 60)) * 100));
+  return Math.min(100, Math.max(0, scalePosition(wpm)));
+}
+
+export function scalePosition(wpm: number): number {
+  return (
+    ((wpm - PACE_SCALE.minimum) / (PACE_SCALE.maximum - PACE_SCALE.minimum))
+    * 100
+  );
 }
 
 function protocolError(state: SessionState): SessionState {

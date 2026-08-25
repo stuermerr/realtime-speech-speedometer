@@ -1,10 +1,12 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef, type CSSProperties } from "react";
 
 import { BrowserSession } from "./browserSession";
 import {
   INITIAL_STATE,
+  PACE_SCALE,
   markerPosition,
   reduceSession,
+  scalePosition,
   type SessionAction,
   type SessionState,
 } from "./state";
@@ -59,7 +61,9 @@ export function App({ createSession = defaultSessionFactory }: AppProps) {
           <p className="eyebrow">LIVE RHETORIC TRAINING</p>
           <h1>Speech Speedometer</h1>
         </div>
-        <p className="target-copy">TARGET <strong>115–150</strong> WPM</p>
+        <p className="target-copy">
+          TARGET <strong>{PACE_SCALE.targetMinimum}–{PACE_SCALE.targetMaximum}</strong> WPM
+        </p>
       </header>
 
       <section
@@ -110,8 +114,22 @@ export function App({ createSession = defaultSessionFactory }: AppProps) {
 
 function PaceScale({ state }: { readonly state: SessionState }) {
   const marker = state.display === null ? null : markerPosition(state.display.wpm);
+  const targetStart = scalePosition(PACE_SCALE.targetMinimum);
+  const targetEnd = scalePosition(PACE_SCALE.targetMaximum);
+  const scaleStyle = {
+    "--target-start": `${targetStart}%`,
+    "--target-end": `${targetEnd}%`,
+    "--target-width": `${targetEnd - targetStart}%`,
+  } as CSSProperties;
   return (
-    <section className="pace-scale" aria-label="Pace scale from 60 to 220 words per minute">
+    <section
+      className="pace-scale"
+      style={scaleStyle}
+      aria-label={
+        `Pace scale from ${PACE_SCALE.minimum} to ${PACE_SCALE.maximum} words per minute; `
+        + `target ${PACE_SCALE.targetMinimum} to ${PACE_SCALE.targetMaximum}`
+      }
+    >
       <div className="scale-track">
         <div className="target-zone" aria-hidden="true" />
         {marker !== null && (
@@ -124,7 +142,10 @@ function PaceScale({ state }: { readonly state: SessionState }) {
         )}
       </div>
       <div className="scale-labels" aria-hidden="true">
-        <span>60</span><span className="target-start">115</span><span className="target-end">150</span><span>220</span>
+        <span>{PACE_SCALE.minimum}</span>
+        <span className="target-start">{PACE_SCALE.targetMinimum}</span>
+        <span className="target-end">{PACE_SCALE.targetMaximum}</span>
+        <span>{PACE_SCALE.maximum}</span>
       </div>
       <div className="scale-guidance" aria-hidden="true">
         <span>TOO SLOW</span><span>ON PACE</span><span>TOO FAST</span>
@@ -141,7 +162,7 @@ function pacePresentation(state: SessionState): { status: string; direction: str
     if (state.display.paceStatus === "green") {
       return { status: "ON PACE", direction: "Keep this rhythm" };
     }
-    return state.display.wpm < 115
+    return state.display.wpm < PACE_SCALE.targetMinimum
       ? { status: "TOO SLOW", direction: "Pick up the pace" }
       : { status: "TOO FAST", direction: "Slow down" };
   }

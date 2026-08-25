@@ -53,13 +53,13 @@ h1 { margin-top: 0.15rem; font: 600 clamp(1rem, 1.8vw, 1.45rem)/1.1 "Arial Narro
 .live-reading[data-pace="red"] .pace-status { color: var(--red); }
 
 .pace-scale { width: min(70rem, 88vw); margin: 0 auto; }
-.scale-track { position: relative; height: 0.75rem; border-radius: 99px; background: linear-gradient(90deg, #55252b 0 34.375%, var(--green-dark) 34.375% 56.25%, #55252b 56.25%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
-.target-zone { position: absolute; inset: -0.3rem auto -0.3rem 34.375%; width: 21.875%; border-inline: 1px solid rgba(112, 240, 173, .65); }
+.scale-track { position: relative; height: 0.75rem; border-radius: 99px; background: linear-gradient(90deg, #55252b 0 var(--target-start), var(--green-dark) var(--target-start) var(--target-end), #55252b var(--target-end)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.target-zone { position: absolute; inset: -0.3rem auto -0.3rem var(--target-start); width: var(--target-width); border-inline: 1px solid rgba(112, 240, 173, .65); }
 .pace-marker { position: absolute; top: 50%; width: 1.25rem; height: 1.25rem; transform: translate(-50%, -50%) rotate(45deg); border: 3px solid #080b10; border-radius: 0.15rem; background: #fff; box-shadow: 0 0 0 2px #fff, 0 0 22px rgba(255,255,255,.65); transition: left 220ms ease-out; }
-.scale-labels, .scale-guidance { display: grid; grid-template-columns: 34.375fr 21.875fr 43.75fr; color: #788392; font: 600 0.7rem/1 Inter, sans-serif; letter-spacing: .08em; }
+.scale-labels, .scale-guidance { display: grid; grid-template-columns: var(--target-start) var(--target-width) 1fr; color: #788392; font: 600 0.7rem/1 Inter, sans-serif; letter-spacing: .08em; }
 .scale-labels { position: relative; display: flex; justify-content: space-between; margin-top: .8rem; }
-.scale-labels .target-start { position: absolute; left: 34.375%; transform: translateX(-50%); color: #b5c1bd; }
-.scale-labels .target-end { position: absolute; left: 56.25%; transform: translateX(-50%); color: #b5c1bd; }
+.scale-labels .target-start { position: absolute; left: var(--target-start); transform: translateX(-50%); color: #b5c1bd; }
+.scale-labels .target-end { position: absolute; left: var(--target-end); transform: translateX(-50%); color: #b5c1bd; }
 .scale-guidance { margin-top: .7rem; text-align: center; }
 .scale-guidance span:first-child { text-align: left; }
 .scale-guidance span:last-child { text-align: right; }

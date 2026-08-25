@@ -933,8 +933,8 @@ unavailable, and clears them when a fresh session starts.
 - Stop transitions the UI immediately to `finalizing`; the adapter preserves
   the recorder's final chunk, waits for ordered sends, sends the existing Stop
   command, and waits for the backend's provider-drained `stopped` message.
-- Summary metrics and transcript analysis remain deferred to the next product
-  milestone.
+- This M5 slice does not change ADR-011: the accepted deterministic session
+  summary remains required, but its implementation is owned by issue #17.
 
 ### Interview explanation
 

@@ -9,8 +9,8 @@ complements the browser-to-Deepgram transport evidence in
 Run from the repository root:
 
 ```bash
-uv run --directory backend pytest
-uv run --directory backend mypy app tests spikes
+uv run --directory backend --locked pytest
+uv run --directory backend --locked mypy app tests spikes
 npm --prefix frontend test
 npm --prefix frontend run typecheck
 npm --prefix frontend run build

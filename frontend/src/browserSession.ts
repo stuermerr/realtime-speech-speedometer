@@ -45,6 +45,7 @@ export class BrowserSession {
   private recorder: RecorderPort | null = null;
   private sendChain: Promise<void> = Promise.resolve();
   private cleaned = false;
+  private cancelConnection: (() => void) | null = null;
 
   constructor(
     private readonly dispatch: Dispatch,
@@ -59,7 +60,12 @@ export class BrowserSession {
     }
 
     try {
-      this.stream = await this.runtime.getUserMedia();
+      const stream = await this.runtime.getUserMedia();
+      if (this.cleaned) {
+        stopStream(stream);
+        return;
+      }
+      this.stream = stream;
       this.socket = this.runtime.createSocket();
       this.socket.binaryType = "arraybuffer";
       await this.waitForConnection(this.socket);
@@ -74,6 +80,7 @@ export class BrowserSession {
       this.recorder.start(CHUNK_MILLISECONDS);
       this.dispatch({ type: "listening" });
     } catch (error) {
+      if (this.cleaned) return;
       this.fail(startErrorMessage(error));
     }
   }
@@ -86,6 +93,7 @@ export class BrowserSession {
   cleanup(): void {
     if (this.cleaned) return;
     this.cleaned = true;
+    this.cancelConnection?.();
     if (this.recorder?.state !== "inactive") this.recorder?.stop();
     this.releaseMicrophone();
     if (this.socket !== null && this.socket.readyState < this.socket.CLOSING) {
@@ -97,19 +105,35 @@ export class BrowserSession {
 
   private waitForConnection(socket: SocketPort): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timer = this.runtime.setTimer(() => {
-        reject(new Error("Could not connect to the live service in time."));
-      }, CONNECTION_TIMEOUT_MILLISECONDS);
-      const opened = () => {
-        this.runtime.clearTimer(timer);
-        resolve();
+      let timer: number | null = null;
+      let settled = false;
+      const finish = (complete: () => void): void => {
+        if (settled) return;
+        settled = true;
+        if (timer !== null) this.runtime.clearTimer(timer);
+        socket.removeEventListener("open", opened);
+        socket.removeEventListener("error", failed);
+        socket.removeEventListener("close", closed);
+        if (this.cancelConnection === cancelled) this.cancelConnection = null;
+        complete();
       };
-      const failed = () => {
-        this.runtime.clearTimer(timer);
-        reject(new Error("Could not connect to the live service."));
-      };
+      const opened = () => finish(resolve);
+      const failed = () => finish(() => reject(
+        new Error("Could not connect to the live service."),
+      ));
+      const closed = () => finish(() => reject(
+        new Error("The live connection closed while starting."),
+      ));
+      const cancelled = () => finish(() => reject(
+        new Error("Live session startup was cancelled."),
+      ));
+      this.cancelConnection = cancelled;
       socket.addEventListener("open", opened, { once: true });
       socket.addEventListener("error", failed, { once: true });
+      socket.addEventListener("close", closed, { once: true });
+      timer = this.runtime.setTimer(() => finish(() => reject(
+        new Error("Could not connect to the live service in time."),
+      )), CONNECTION_TIMEOUT_MILLISECONDS);
     });
   }
 
@@ -183,7 +207,7 @@ export class BrowserSession {
 
   private releaseMicrophone(): void {
     if (this.stream === null) return;
-    for (const track of this.stream.getTracks()) track.stop();
+    stopStream(this.stream);
     this.stream = null;
   }
 }
@@ -223,6 +247,10 @@ function parseBackendMessage(raw: unknown): BackendMessage {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stopStream(stream: StreamPort): void {
+  for (const track of stream.getTracks()) track.stop();
 }
 
 function startErrorMessage(error: unknown): string {

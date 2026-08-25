@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 
 import {
   BrowserSession,
@@ -55,12 +55,12 @@ function runtime(options?: { supported?: boolean; autoOpen?: boolean }): {
   value: BrowserRuntime;
   socket: FakeSocket;
   recorder: FakeRecorder;
-  stopTrack: ReturnType<typeof vi.fn>;
+  stopTrack: Mock<() => void>;
   getUserMedia: ReturnType<typeof vi.fn>;
 } {
   const socket = new FakeSocket();
   const recorder = new FakeRecorder();
-  const stopTrack = vi.fn();
+  const stopTrack = vi.fn<() => void>();
   const getUserMedia = vi.fn(async () => ({
     getTracks: () => [{ stop: stopTrack }],
   }));
@@ -176,5 +176,41 @@ describe("browser session adapter", () => {
     });
     expect(browser.stopTrack).toHaveBeenCalledTimes(1);
     expect(browser.socket.closeCount).toBe(1);
+  });
+
+  it("releases a microphone that arrives after startup was cleaned up", async () => {
+    const browser = runtime();
+    let resolveStream: ((stream: { getTracks(): { stop(): void }[] }) => void) | undefined;
+    browser.value.getUserMedia = () => new Promise((resolve) => {
+      resolveStream = resolve;
+    });
+    const createSocket = vi.spyOn(browser.value, "createSocket");
+    const session = new BrowserSession(() => undefined, browser.value);
+    const start = session.start();
+
+    session.cleanup();
+    resolveStream?.({ getTracks: () => [{ stop: () => browser.stopTrack() }] });
+    await start;
+
+    expect(browser.stopTrack).toHaveBeenCalledTimes(1);
+    expect(createSocket).not.toHaveBeenCalled();
+  });
+
+  it("cancels an in-progress connection without waiting for its timeout", async () => {
+    vi.useFakeTimers();
+    const browser = runtime({ autoOpen: false });
+    const events: SessionAction[] = [];
+    const session = new BrowserSession(events.push.bind(events), browser.value);
+    const start = session.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    session.cleanup();
+    await start;
+
+    expect(events).toEqual([]);
+    expect(browser.stopTrack).toHaveBeenCalledTimes(1);
+    expect(browser.socket.closeCount).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
   });
 });
