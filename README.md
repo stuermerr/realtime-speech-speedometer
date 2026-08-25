@@ -1,15 +1,15 @@
 # Speech Speedometer
 
 Speech Speedometer is a rhetoric-training web application that gives live
-feedback about speaking pace. The current local tracer bullet includes a
-FastAPI-served vanilla browser adapter; a future polished frontend remains a
-separate tooling boundary.
+feedback about speaking pace. A React/TypeScript presentation UI streams
+browser microphone audio through FastAPI to Deepgram and renders the backend's
+deterministic live WPM and red/green pace classification.
 
 ## Repository layout
 
 ```text
 .
-├── backend/          Python/FastAPI uv project and temporary debug client
+├── backend/          Python/FastAPI realtime service
 │   ├── app/
 │   ├── spikes/
 │   ├── tests/
@@ -17,15 +17,13 @@ separate tooling boundary.
 │   ├── .python-version
 │   ├── pyproject.toml
 │   └── uv.lock
-├── frontend/         reserved for the future polished React/TypeScript UI
+├── frontend/         React/TypeScript Vite product UI
 ├── docs/             product, architecture, and spike evidence
 └── samples/          shared audio samples
 ```
 
-The repository root is not a Python or Node project. The backend owns its
-dependencies, lockfile, virtual environment, and local environment file. When
-the frontend is initialized, it will own a separate `package.json`, Node
-lockfile, and `node_modules` directory; it will not use uv.
+The repository root is not a Python or Node project. The backend and frontend
+own independent dependencies, lockfiles, and toolchains.
 
 ## Backend setup
 
@@ -56,25 +54,44 @@ Commands can be run from either working directory.
 | Azure spike | `uv run python -m spikes.run_realtime_transcription` | `uv run --directory backend python -m spikes.run_realtime_transcription` |
 | Deepgram spike | `uv run python -m spikes.run_deepgram_transcription` | `uv run --directory backend python -m spikes.run_deepgram_transcription` |
 
-## Local browser tracer bullet
+## Frontend setup
 
-Set `DEEPGRAM_API_KEY` in `backend/.env`, then start the application from the
-repository root:
+Install and run the frontend development server from `frontend/`:
 
 ```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite serves http://localhost:5173 and proxies `/ws/live` to FastAPI on port
+8000. Use `npm test`, `npm run typecheck`, and `npm run build` for frontend
+verification.
+
+## Local product flow
+
+Set `DEEPGRAM_API_KEY` in `backend/.env`. For development, run FastAPI and Vite
+separately and open http://localhost:5173/. For a production-style local run,
+build the frontend first and let FastAPI serve `frontend/dist`:
+
+```bash
+npm --prefix frontend run build
 uv run --directory backend uvicorn app.main:app --reload
 ```
 
 Open http://localhost:8000/ in current desktop Chrome or Chromium. Localhost is
 treated as a secure context for microphone access. Press Start, grant microphone
-permission, speak, then press Stop. The browser records
+permission, speak, then press Stop. The product keeps the most recent valid
+pace visible through pauses and waits for provider finalization before showing
+completion. The browser records
 `audio/webm;codecs=opus`; unsupported browsers fail before requesting the
 microphone. A clean stopped state is shown only after Deepgram drains the final
 audio, emits Metadata, and closes normally.
 
-The browser never receives the Deepgram credential. See
-[the manual acceptance procedure](docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md) for
-the reproducible real-browser checks.
+The browser never receives the Deepgram credential. See the
+[transport acceptance procedure](docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md) and
+[product acceptance procedure](docs/08_M5_PRODUCT_ACCEPTANCE.md) for the
+reproducible real-browser checks.
 
 Use `--directory backend` for root-level commands. `--project backend` selects
 the backend environment but does not change the command's working directory,

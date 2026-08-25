@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -23,7 +23,7 @@ from app.services.deepgram_transcription import (
 )
 
 
-STATIC_DIRECTORY = Path(__file__).parent / "static"
+FRONTEND_DIRECTORY = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 ProviderFactory = Callable[[], BrowserDeepgramSession]
 
 
@@ -34,15 +34,31 @@ def _browser_provider() -> BrowserDeepgramSession:
     )
 
 
-def create_app(*, provider_factory: ProviderFactory | None = None) -> FastAPI:
+def create_app(
+    *,
+    provider_factory: ProviderFactory | None = None,
+    frontend_directory: Path = FRONTEND_DIRECTORY,
+) -> FastAPI:
     application = FastAPI(title="Speech Speedometer")
     make_provider = _browser_provider if provider_factory is None else provider_factory
     debug_logging_enabled = LiveWpmDebugSettings.from_environment().enabled
-    application.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
+    assets_directory = frontend_directory / "assets"
+    if assets_directory.is_dir():
+        application.mount(
+            "/assets",
+            StaticFiles(directory=assets_directory),
+            name="frontend-assets",
+        )
 
     @application.get("/", response_class=FileResponse)
-    async def debug_client() -> FileResponse:
-        return FileResponse(STATIC_DIRECTORY / "index.html")
+    async def product_client() -> FileResponse:
+        index = frontend_directory / "index.html"
+        if not index.is_file():
+            raise HTTPException(
+                status_code=503,
+                detail="Frontend build is unavailable; run npm run build in frontend",
+            )
+        return FileResponse(index)
 
     @application.get("/health")
     async def health() -> dict[str, str]:
