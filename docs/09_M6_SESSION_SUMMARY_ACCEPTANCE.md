@@ -48,6 +48,38 @@ in the issue before declaring this manual regression passed. Diagnostics must
 remain secret-safe: do not include transcript text, audio, credentials, or raw
 provider payloads.
 
+## Recorded result — 2026-08-25
+
+| Evidence | Recorded value |
+| --- | --- |
+| Date/time | 2026-08-25 ~18:16–18:45 CEST |
+| Chrome/Chromium version | Playwright headed Chrome (system Chrome) |
+| Platform | Linux x86_64 |
+| Backend errors | 0 |
+| Browser console errors | 0 |
+| WebSocket sessions | 4 accepted and completed |
+
+### Step results
+
+| Step | Result |
+| --- | --- |
+| 1. Start, speak ≥4 s, pause ≥1 s, resume, Stop | PASS — live WPM held through pause, FINALIZING… appeared before summary |
+| 2. Live pace retained through pause | PASS — last WPM/status remained on screen during silent gap |
+| 3. Summary metrics shown | PASS — Average WPM, Words, Active speech, Presentation duration visible; durations in m:ss format; Average WPM rounded in UI |
+| 4. Empty presentation → "No speech was detected" | PASS — no artificial zero metrics; sub-four-second presentation showed word/time metrics with Average WPM unavailable |
+| 5. New presentation → reset | PASS — no carried-over state; started with neutral CALCULATING display |
+| 6. Inactivity stop (empty + after-speech) | PASS — 5-minute inactivity triggered "No speech was detected" with inactivity explanation; after-speech variant retained normal summary |
+| 7. Readability at distance | PASS — user confirmed far-away visibility acceptable |
+
+### Observations
+
+- The final page state after completion shows the last WPM (e.g. 251) and
+  "TOO FAST" prominently in the center, with the summary metrics below.
+- The summary contains only numeric metrics; no transcript or pace-over-time
+  visualization is included.
+- Far-away readability was acceptable at test distances.
+- Both UX observations are documented in `docs/10_UX_IMPROVEMENT_REQUESTS.md`.
+
 ## Original-case audit
 
 | Requirement | M6 evidence |
