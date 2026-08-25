@@ -83,8 +83,12 @@ Open http://localhost:8000/ in current desktop Chrome or Chromium. Localhost is
 treated as a secure context for microphone access. Press Start, grant microphone
 permission, speak, then press Stop. The product keeps the most recent valid
 pace visible through pauses and waits for provider finalization before showing
-completion. Completion shows a deterministic global summary: Average WPM,
-finalized words, active speech, and presentation duration. Empty presentations
+completion. Completion replaces the dominant live reading with a scrollable
+summary containing Average WPM, finalized words, active speech, presentation
+duration, and the complete chronological transcript grouped into deterministic
+pace segments. Each segment shows rounded WPM, an On pace/Too slow/Too fast
+label, and a compact marker on the same fixed pace scale, with transcript text
+in the left column and pace analysis in the right column on desktop. Empty presentations
 say `No speech was detected`; presentations below four seconds of active speech
 show their word/time metrics but leave Average WPM unavailable. The browser
 reveals this summary only after Deepgram has drained and the backend has sent
@@ -98,7 +102,8 @@ audio, emits Metadata, and closes normally.
 The browser never receives the Deepgram credential. See the
 [transport acceptance procedure](docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md) and
 [product acceptance procedure](docs/08_M5_PRODUCT_ACCEPTANCE.md), and the
-[M6 summary acceptance procedure](docs/09_M6_SESSION_SUMMARY_ACCEPTANCE.md)
+[M6 summary acceptance procedure](docs/09_M6_SESSION_SUMMARY_ACCEPTANCE.md), and
+the [segment-summary acceptance record](docs/11_SEGMENT_PACE_SUMMARY_ACCEPTANCE.md)
 for the reproducible real-browser checks.
 
 Use `--directory backend` for root-level commands. `--project backend` selects
@@ -168,7 +173,11 @@ timeline is emitted, so the UI retains the last valid WPM value.
 At finalization, the immutable finalized-word timeline goes separately to
 `SessionSummaryCalculator`. It reuses the active-speech gap policy, calculates
 presentation duration from first word start to last word end, and emits the
-unrounded summary metrics. It never averages the rolling live WPM values.
+unrounded summary metrics. Non-empty final provider chunks also retain their
+formatted text and whole-word boundaries. The calculator greedily groups whole
+chunks to at least four active-speech seconds where possible, merges a short
+tail backward, and calculates each segment independently. It never averages the
+rolling live WPM values or performs sentence/NLP splitting.
 
 ## Product and architecture
 

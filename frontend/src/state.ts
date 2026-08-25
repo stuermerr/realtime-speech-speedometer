@@ -24,6 +24,13 @@ export interface SessionSummary {
   readonly finalizedWords: number;
   readonly activeSpeakingSeconds: number;
   readonly presentationDurationSeconds: number;
+  readonly segments: readonly SummarySegment[];
+}
+
+export interface SummarySegment {
+  readonly text: string;
+  readonly averageSpeakingPace: number | null;
+  readonly paceStatus: PaceStatus | null;
 }
 
 export interface SessionState {
@@ -98,9 +105,15 @@ export function reduceSession(
       };
     }
     case "fail":
-      return { ...state, lifecycle: "error", error: action.message, pendingSummary: null };
+      return {
+        ...state, lifecycle: "error", error: action.message,
+        pendingSummary: null, completedSummary: null, completionReason: null,
+      };
     case "unsupported":
-      return { ...state, lifecycle: "unsupported", error: action.message, pendingSummary: null };
+      return {
+        ...state, lifecycle: "unsupported", error: action.message,
+        pendingSummary: null, completedSummary: null, completionReason: null,
+      };
   }
 }
 

@@ -1016,6 +1016,75 @@ completion plus that explanation.
 
 ---
 
+## ADR-023 — Final-Chunk Pace Segments and Dedicated Completed Layout
+
+### Status
+
+**Accepted**
+
+### Decision
+
+Extend ADR-022's provider-drained `summary` payload with chronological
+`segments`. During a session, retain immutable chunks only for non-empty
+Deepgram `Results` events whose `is_final` value is true. Each chunk preserves
+the provider's formatted transcript text and normalized timed words;
+`speech_final`, endpointing events, and semantic sentence processing do not
+define segment boundaries.
+
+The summary calculator continues to flatten all finalized chunks for the four
+global metrics. Separately, it greedily groups whole adjacent chunks until the
+group reaches at least four active-speech seconds. It never splits a chunk and
+merges a final short remainder into the preceding group. If the whole
+presentation is shorter, it emits one pace-unavailable segment. Segment text is
+trimmed and joined with one space; punctuation and internal formatting remain
+provider-authored.
+
+Each segment exposes only `text`, unrounded `average_speaking_pace`, and
+backend-classified `pace_status` (`green`, `red`, or `null`). Segment WPM uses
+the same one-second active-speech gap policy as global and live WPM, but is
+calculated independently. Consequently, segment active durations need not sum
+to the global active duration: a sub-threshold gap crossing two emitted segment
+boundaries counts globally but is absent from both independent segment
+timelines.
+
+After ordered `summary` then `stopped`, React switches from the viewport-sized
+Live layout to a vertically scrollable Completed layout. It shows global
+metrics followed by every transcript segment and a compact variant of the
+shared value-driven pace scale. Each desktop segment is vertically divided
+into transcript text on the left and pace analysis on the right; narrow screens
+stack those regions. An unavailable segment uses a visibly neutral marker that
+does not imply a pace classification. React rounds WPM for display, presents backend
+`green` as `On pace`, and derives `Too slow` or `Too fast` only when the backend
+sent `red`. The Completed layout omits the live reading and full-size scale.
+
+### Why
+
+- Final provider chunks are the smallest authoritative formatted transcript
+  units already available without semantic inference.
+- Whole-chunk grouping gives useful local pace feedback while keeping the
+  algorithm deterministic and explainable.
+- A dedicated Completed hierarchy removes a misleading frozen live reading and
+  makes an uncapped transcript recap usable on long presentations.
+
+### Consequences
+
+- Session memory now retains finalized chunk text as well as timed words, but
+  nothing persists beyond the active browser session.
+- Empty final Results still clear the interim tail but create no segment.
+- Parser failure, provider failure, or drain failure discards pending summary
+  data and never enters Completed.
+- This post-MVP decision supersedes only ADR-022's explicit no-segments
+  consequence; ADR-022's global metrics and finalization protocol remain
+  accepted.
+
+### Rationale summary
+
+> I keep Deepgram's final chunks as trustworthy formatting boundaries, combine
+> them deterministically into useful pace windows, and show them only after the
+> same provider-drained completion handshake as the global summary.
+
+---
+
 # Open Decisions
 
 ## OD-006 — Yellow Pace Band
@@ -1025,6 +1094,6 @@ red outside it. A yellow band is not justified by current evidence.
 
 ## OD-007 — Session Summary Grouping
 
-**Closed by ADR-022.** The MVP ships a global deterministic summary without
-transcript grouping. Segment analysis is post-MVP work and must not leave
-partial chunk retention, a protocol field, or unused UI on `main`.
+**Closed by ADR-023.** The MVP historically shipped the ADR-022 global summary;
+the post-MVP enhancement now groups whole finalized provider chunks into
+deterministic transcript pace segments as one complete vertical feature.

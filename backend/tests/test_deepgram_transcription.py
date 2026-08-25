@@ -219,6 +219,7 @@ def test_sanitized_results_preserve_atomic_interim_revision_and_finalization() -
     assert results == [
         ParsedDeepgramResult(
             is_final=False,
+            text="Guten Morgen",
             words=(
                 RecognizedWord("guten", 0.16, 0.48),
                 RecognizedWord("morgen", 0.50, 0.91),
@@ -226,6 +227,7 @@ def test_sanitized_results_preserve_atomic_interim_revision_and_finalization() -
         ),
         ParsedDeepgramResult(
             is_final=False,
+            text="Guten Morgen zusammen",
             words=(
                 RecognizedWord("guten", 0.16, 0.48),
                 RecognizedWord("morgen", 0.50, 0.91),
@@ -234,6 +236,7 @@ def test_sanitized_results_preserve_atomic_interim_revision_and_finalization() -
         ),
         ParsedDeepgramResult(
             is_final=False,
+            text="Guten Morgen miteinander",
             words=(
                 RecognizedWord("guten", 0.16, 0.48),
                 RecognizedWord("morgen", 0.50, 0.90),
@@ -242,14 +245,16 @@ def test_sanitized_results_preserve_atomic_interim_revision_and_finalization() -
         ),
         ParsedDeepgramResult(
             is_final=False,
+            text="Guten Morgen",
             words=(
                 RecognizedWord("guten", 0.16, 0.48),
                 RecognizedWord("morgen", 0.50, 0.90),
             ),
         ),
-        ParsedDeepgramResult(is_final=False, words=()),
+        ParsedDeepgramResult(is_final=False, text="", words=()),
         ParsedDeepgramResult(
             is_final=True,
+            text="Guten Morgen miteinander",
             words=(
                 RecognizedWord("guten", 0.16, 0.48),
                 RecognizedWord("morgen", 0.50, 0.90),
@@ -339,6 +344,7 @@ def test_only_the_first_alternative_is_part_of_the_parser_contract() -> None:
 
     assert result == ParsedDeepgramResult(
         is_final=False,
+        text="spoken",
         words=(RecognizedWord("spoken", 0.0, 0.5),),
     )
 

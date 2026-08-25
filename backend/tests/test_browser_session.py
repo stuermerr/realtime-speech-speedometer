@@ -163,6 +163,13 @@ def test_binary_audio_and_stop_drain_to_measurements_then_stopped() -> None:
             "finalized_words": 8,
             "active_speaking_seconds": 4.0,
             "presentation_duration_seconds": 4.0,
+            "segments": [
+                {
+                    "text": "word-0 word-1 word-2 word-3 word-4 word-5 word-6 word-7",
+                    "average_speaking_pace": 120.0,
+                    "pace_status": "green",
+                }
+            ],
         },
         {"type": "stopped", "reason": "user"},
     ]
@@ -193,6 +200,7 @@ def test_unavailable_measurement_is_null_and_unchanged_result_is_suppressed() ->
             "finalized_words": 0,
             "active_speaking_seconds": 0.0,
             "presentation_duration_seconds": 0.0,
+            "segments": [],
         },
         {"type": "stopped", "reason": "user"},
     ]
@@ -220,6 +228,7 @@ def test_inactivity_requests_browser_stop_then_emits_empty_completion() -> None:
             "finalized_words": 0,
             "active_speaking_seconds": 0.0,
             "presentation_duration_seconds": 0.0,
+            "segments": [],
         },
         {"type": "stopped", "reason": "inactivity"},
     ]
