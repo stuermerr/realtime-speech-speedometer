@@ -12,6 +12,7 @@ from app.services.deepgram_transcription import (
     ParsedDeepgramResult,
 )
 from app.services.live_wpm import LiveWpmPipeline, SessionWordState
+from app.services.session_summary import FinalizedChunk
 from app.services.wpm import RecognizedWord
 from spikes.run_deepgram_transcription import run_probe
 from spikes.run_realtime_transcription import NormalizedAudio
@@ -31,7 +32,30 @@ def word(text: str, start: float, end: float) -> RecognizedWord:
 def result(
     *words: RecognizedWord, is_final: bool = False
 ) -> ParsedDeepgramResult:
-    return ParsedDeepgramResult(is_final=is_final, words=words)
+    return ParsedDeepgramResult(
+        is_final=is_final,
+        text=" ".join(word.text for word in words),
+        words=words,
+    )
+
+
+def test_only_non_empty_is_final_results_become_summary_chunks() -> None:
+    pipeline = LiveWpmPipeline()
+    interim = result(word("draft", 0.0, 0.5))
+    empty_final = ParsedDeepgramResult(is_final=True, text="", words=())
+    final = ParsedDeepgramResult(
+        is_final=True,
+        text="  Formatted final.  ",
+        words=(word("formatted", 0.0, 0.5), word("final", 0.5, 1.0)),
+    )
+
+    pipeline.process_result(interim)
+    pipeline.process_result(empty_final)
+    pipeline.process_result(final)
+
+    assert pipeline.finalized_chunks == (
+        FinalizedChunk("  Formatted final.  ", final.words),
+    )
 
 
 def provider_result(

@@ -66,6 +66,9 @@ export function App({ createSession = defaultSessionFactory }: AppProps) {
         </p>
       </header>
 
+      {state.lifecycle === "completed" ? (
+        <CompletedView state={state} start={start} />
+      ) : <>
       <section
         className="live-reading"
         data-pace={state.display?.paceStatus ?? "neutral"}
@@ -80,12 +83,9 @@ export function App({ createSession = defaultSessionFactory }: AppProps) {
         <p className="pace-direction">{presentation.direction}</p>
       </section>
 
-      <PaceScale state={state} />
+      <PaceScale value={state.display?.wpm ?? null} variant="live" />
 
       <section className="session-controls" aria-label="Presentation controls">
-        {state.lifecycle === "completed" && (
-          <SessionSummaryView state={state} />
-        )}
         {(state.lifecycle === "error" || state.lifecycle === "unsupported") && (
           <div role="alert" className="error-panel">
             <p>{state.lifecycle === "unsupported" ? "Browser not supported" : "Session interrupted"}</p>
@@ -108,31 +108,55 @@ export function App({ createSession = defaultSessionFactory }: AppProps) {
           </button>
         )}
       </section>
+      </>}
     </main>
   );
 }
 
-function SessionSummaryView({ state }: { readonly state: SessionState }) {
+function CompletedView({
+  state, start,
+}: { readonly state: SessionState; readonly start: () => void }) {
   const summary = state.completedSummary;
   if (summary === null) return null;
   const inactive = state.completionReason === "inactivity";
-  if (summary.finalizedWords === 0) {
-    return <div className="summary" aria-live="polite">
-      <p className="completion-title">No speech was detected</p>
-      {inactive && <p className="summary-note">The presentation ended after five minutes without recognized speech.</p>}
-    </div>;
-  }
-  return <div className="summary" aria-live="polite">
-    <p className="completion-title">Presentation complete</p>
+  const empty = summary.finalizedWords === 0;
+  return <section className="completed-view" aria-live="polite">
+    <div className="summary">
+    <p className="completion-title">{empty ? "No speech was detected" : "Presentation complete"}</p>
     <dl className="summary-metrics">
       <div><dt>Average WPM</dt><dd>{summary.averageSpeakingPace === null ? "—" : Math.round(summary.averageSpeakingPace)}</dd></div>
       <div><dt>Words</dt><dd>{summary.finalizedWords}</dd></div>
       <div><dt>Active speech</dt><dd>{formatDuration(summary.activeSpeakingSeconds)}</dd></div>
       <div><dt>Presentation duration</dt><dd>{formatDuration(summary.presentationDurationSeconds)}</dd></div>
     </dl>
-    {summary.averageSpeakingPace === null && <p className="summary-note">Average WPM needs at least four seconds of active speech.</p>}
+    {!empty && summary.averageSpeakingPace === null && <p className="summary-note">Average WPM needs at least four seconds of active speech.</p>}
     {inactive && <p className="summary-note">The presentation ended after five minutes without recognized speech.</p>}
-  </div>;
+    </div>
+    {!empty && <section className="segment-recap" aria-labelledby="pace-transcript-heading">
+      <h2 id="pace-transcript-heading">Pace transcript</h2>
+      <ol className="segment-list">
+        {summary.segments.map((segment, index) => (
+          <li className="summary-segment" key={index}>
+            <div className="segment-copy">
+              <p className="segment-text">{segment.text}</p>
+            </div>
+            <div className="segment-analysis">
+              <div className="segment-pace">
+                <span className="segment-value">
+                  {segment.averageSpeakingPace === null ? "—" : Math.round(segment.averageSpeakingPace)} WPM
+                </span>
+                <span data-pace={segment.paceStatus ?? "neutral"}>
+                  {segmentLabel(segment.averageSpeakingPace, segment.paceStatus)}
+                </span>
+              </div>
+              <PaceScale value={segment.averageSpeakingPace} variant="compact" index={index + 1} />
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>}
+    <button className="primary-button" type="button" onClick={start}>Start new presentation</button>
+  </section>;
 }
 
 function formatDuration(seconds: number): string {
@@ -140,8 +164,16 @@ function formatDuration(seconds: number): string {
   return `${Math.floor(wholeSeconds / 60)}:${String(wholeSeconds % 60).padStart(2, "0")}`;
 }
 
-function PaceScale({ state }: { readonly state: SessionState }) {
-  const marker = state.display === null ? null : markerPosition(state.display.wpm);
+function PaceScale({
+  value, variant, index,
+}: {
+  readonly value: number | null;
+  readonly variant: "live" | "compact";
+  readonly index?: number;
+}) {
+  const available = value !== null;
+  const showMarker = available || variant === "compact";
+  const markerPositionStyle = available ? { left: `${markerPosition(value)}%` } : undefined;
   const targetStart = scalePosition(PACE_SCALE.targetMinimum);
   const targetEnd = scalePosition(PACE_SCALE.targetMaximum);
   const scaleStyle = {
@@ -151,35 +183,45 @@ function PaceScale({ state }: { readonly state: SessionState }) {
   } as CSSProperties;
   return (
     <section
-      className="pace-scale"
+      className={`pace-scale ${variant === "compact" ? "pace-scale-compact" : ""}`}
       style={scaleStyle}
       aria-label={
-        `Pace scale from ${PACE_SCALE.minimum} to ${PACE_SCALE.maximum} words per minute; `
+        `${variant === "compact" ? `Segment ${index ?? ""} pace scale` : "Pace scale"} from ${PACE_SCALE.minimum} to ${PACE_SCALE.maximum} words per minute; `
         + `target ${PACE_SCALE.targetMinimum} to ${PACE_SCALE.targetMaximum}`
       }
     >
       <div className="scale-track">
         <div className="target-zone" aria-hidden="true" />
-        {marker !== null && (
+        {showMarker && (
           <div
             className="pace-marker"
-            data-testid="pace-marker"
-            style={{ left: `${marker}%` }}
-            aria-label={`Current pace ${Math.round(state.display?.wpm ?? 0)} words per minute`}
+            data-testid={variant === "compact" ? "compact-pace-marker" : "pace-marker"}
+            data-available={available}
+            style={markerPositionStyle}
+            aria-label={available
+              ? `${variant === "compact" ? "Segment" : "Current"} pace ${Math.round(value)} words per minute`
+              : "Segment pace unavailable"}
           />
         )}
       </div>
-      <div className="scale-labels" aria-hidden="true">
+      {variant === "live" && <div className="scale-labels" aria-hidden="true">
         <span>{PACE_SCALE.minimum}</span>
         <span className="target-start">{PACE_SCALE.targetMinimum}</span>
         <span className="target-end">{PACE_SCALE.targetMaximum}</span>
         <span>{PACE_SCALE.maximum}</span>
-      </div>
-      <div className="scale-guidance" aria-hidden="true">
+      </div>}
+      {variant === "live" && <div className="scale-guidance" aria-hidden="true">
         <span>TOO SLOW</span><span>ON PACE</span><span>TOO FAST</span>
-      </div>
+      </div>}
     </section>
   );
+}
+
+function segmentLabel(wpm: number | null, status: "green" | "red" | null): string {
+  const category = paceCategory(wpm, status);
+  if (category === "unavailable") return "Pace unavailable";
+  if (category === "on-pace") return "On pace";
+  return category === "too-slow" ? "Too slow" : "Too fast";
 }
 
 function pacePresentation(state: SessionState): { status: string; direction: string } {
@@ -187,10 +229,11 @@ function pacePresentation(state: SessionState): { status: string; direction: str
     return { status: "FINALIZING…", direction: "Finishing the live transcript" };
   }
   if (state.display !== null) {
-    if (state.display.paceStatus === "green") {
+    const category = paceCategory(state.display.wpm, state.display.paceStatus);
+    if (category === "on-pace") {
       return { status: "ON PACE", direction: "Keep this rhythm" };
     }
-    return state.display.wpm < PACE_SCALE.targetMinimum
+    return category === "too-slow"
       ? { status: "TOO SLOW", direction: "Pick up the pace" }
       : { status: "TOO FAST", direction: "Slow down" };
   }
@@ -201,4 +244,13 @@ function pacePresentation(state: SessionState): { status: string; direction: str
     return { status: "COMPLETE", direction: "Your final pace is held above" };
   }
   return { status: "READY", direction: "Press Start when you are ready" };
+}
+
+function paceCategory(
+  wpm: number | null,
+  status: "green" | "red" | null,
+): "unavailable" | "on-pace" | "too-slow" | "too-fast" {
+  if (wpm === null || status === null) return "unavailable";
+  if (status === "green") return "on-pace";
+  return wpm < PACE_SCALE.targetMinimum ? "too-slow" : "too-fast";
 }

@@ -42,13 +42,107 @@ describe("live speedometer product view", () => {
 
     act(() => emit({
       type: "summary",
-      summary: { averageSpeakingPace: 120, finalizedWords: 8, activeSpeakingSeconds: 4, presentationDurationSeconds: 4 },
+      summary: {
+        averageSpeakingPace: 120, finalizedWords: 8, activeSpeakingSeconds: 4,
+        presentationDurationSeconds: 4,
+        segments: [
+          { text: "First complete chunk.", averageSpeakingPace: 120.4, paceStatus: "green" },
+          { text: "Second complete chunk.", averageSpeakingPace: 90.2, paceStatus: "red" },
+          { text: "Final short chunk.", averageSpeakingPace: null, paceStatus: null },
+        ],
+      },
     }));
     act(() => emit({ type: "stopped", reason: "user" }));
     expect(screen.getByText("Presentation complete")).not.toBeNull();
+    expect(screen.queryByText("150", { selector: ".wpm-number" })).toBeNull();
+    expect(screen.queryByLabelText(/Pace scale from/)).toBeNull();
+    expect(screen.getByRole("heading", { name: "Pace transcript" })).not.toBeNull();
+    expect(screen.getByText("First complete chunk.")).not.toBeNull();
+    expect(screen.getByText("Second complete chunk.")).not.toBeNull();
+    expect(screen.getByText("Final short chunk.")).not.toBeNull();
+    expect(screen.getByText("On pace")).not.toBeNull();
+    expect(screen.getByText("Too slow")).not.toBeNull();
+    expect(screen.getByText("Pace unavailable")).not.toBeNull();
+    expect(screen.getAllByTestId("compact-pace-marker")).toHaveLength(3);
+    const unavailableMarker = screen.getByLabelText("Segment pace unavailable");
+    expect(unavailableMarker.getAttribute("data-available")).toBe("false");
+    expect(unavailableMarker.style.left).toBe("");
+    const firstSegment = screen.getByText("First complete chunk.").closest(".summary-segment");
+    expect(firstSegment?.querySelector(":scope > .segment-copy")?.textContent).toContain(
+      "First complete chunk.",
+    );
+    expect(firstSegment?.querySelector(":scope > .segment-analysis")?.textContent).toContain(
+      "120 WPM",
+    );
     expect(
       screen.getByRole("button", { name: "Start new presentation" }),
     ).not.toBeNull();
+  });
+
+  it("keeps global metrics in an empty completion", async () => {
+    const user = userEvent.setup();
+    let emit: (action: SessionAction) => void = () => undefined;
+    render(<App createSession={(dispatch) => {
+      emit = dispatch;
+      return { start: async () => dispatch({ type: "listening" }), stop: () => undefined, cleanup: () => undefined };
+    }} />);
+    await user.click(screen.getByRole("button", { name: "Start presentation" }));
+    act(() => emit({ type: "summary", summary: {
+      averageSpeakingPace: null, finalizedWords: 0, activeSpeakingSeconds: 0,
+      presentationDurationSeconds: 0, segments: [],
+    } }));
+    act(() => emit({ type: "stopped", reason: "user" }));
+
+    expect(screen.getByText("No speech was detected")).not.toBeNull();
+    expect(screen.getByText("Average WPM")).not.toBeNull();
+    expect(screen.getByText("Words")).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: "Pace transcript" })).toBeNull();
+  });
+
+  it("renders a long segment recap completely without capping the list", async () => {
+    const user = userEvent.setup();
+    let emit: (action: SessionAction) => void = () => undefined;
+    render(<App createSession={(dispatch) => {
+      emit = dispatch;
+      return { start: async () => dispatch({ type: "listening" }), stop: () => undefined, cleanup: () => undefined };
+    }} />);
+    await user.click(screen.getByRole("button", { name: "Start presentation" }));
+    const segments = Array.from({ length: 24 }, (_, index) => ({
+      text: `Chronological segment ${index + 1}`,
+      averageSpeakingPace: 120,
+      paceStatus: "green" as const,
+    }));
+    act(() => emit({ type: "summary", summary: {
+      averageSpeakingPace: 120, finalizedWords: 192, activeSpeakingSeconds: 96,
+      presentationDurationSeconds: 100, segments,
+    } }));
+    act(() => emit({ type: "stopped", reason: "user" }));
+
+    expect(document.querySelector("main")?.getAttribute("data-lifecycle")).toBe("completed");
+    expect(document.querySelectorAll(".summary-segment")).toHaveLength(24);
+    expect(screen.getByText("Chronological segment 24")).not.toBeNull();
+  });
+
+  it("uses the same completed layout for inactivity and resets into a fresh session", async () => {
+    const user = userEvent.setup();
+    let emit: (action: SessionAction) => void = () => undefined;
+    render(<App createSession={(dispatch) => {
+      emit = dispatch;
+      return { start: async () => dispatch({ type: "listening" }), stop: () => undefined, cleanup: () => undefined };
+    }} />);
+    await user.click(screen.getByRole("button", { name: "Start presentation" }));
+    act(() => emit({ type: "summary", summary: {
+      averageSpeakingPace: null, finalizedWords: 1, activeSpeakingSeconds: .5,
+      presentationDurationSeconds: .5,
+      segments: [{ text: "Short.", averageSpeakingPace: null, paceStatus: null }],
+    } }));
+    act(() => emit({ type: "stopped", reason: "inactivity" }));
+
+    expect(screen.getByText(/ended after five minutes/)).not.toBeNull();
+    expect(screen.getByText("Short.")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Start new presentation" }));
+    expect(screen.queryByText("Short.")).toBeNull();
+    expect(screen.getByText("CALCULATING…")).not.toBeNull();
   });
 
   it("does not offer retry for an unsupported environment", async () => {

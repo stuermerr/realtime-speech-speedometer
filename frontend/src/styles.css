@@ -26,6 +26,10 @@ button { font: inherit; }
     radial-gradient(circle at 50% 42%, rgba(42, 54, 69, 0.25), transparent 39%),
     linear-gradient(145deg, #0c1118, #06080c 68%);
 }
+.speedometer[data-lifecycle="completed"] {
+  display: block;
+  overflow-y: auto;
+}
 
 .masthead { display: flex; align-items: center; gap: 0.9rem; }
 .brand-mark {
@@ -53,6 +57,10 @@ h1 { margin-top: 0.15rem; font: 600 clamp(1rem, 1.8vw, 1.45rem)/1.1 "Arial Narro
 .live-reading[data-pace="red"] .pace-status { color: var(--red); }
 
 .pace-scale { width: min(70rem, 88vw); margin: 0 auto; }
+.pace-scale-compact { width: 100%; margin-top: .8rem; }
+.pace-scale-compact .scale-track { height: .45rem; }
+.pace-scale-compact .pace-marker { width: .85rem; height: .85rem; border-width: 2px; box-shadow: 0 0 0 1px #fff; }
+.pace-scale-compact .pace-marker[data-available="false"] { inset: 50% 0 auto; width: auto; height: 0; transform: none; border: 0; border-top: 2px dashed var(--muted); border-radius: 0; background: none; box-shadow: none; opacity: .7; }
 .scale-track { position: relative; height: 0.75rem; border-radius: 99px; background: linear-gradient(90deg, #55252b 0 var(--target-start), var(--green-dark) var(--target-start) var(--target-end), #55252b var(--target-end)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
 .target-zone { position: absolute; inset: -0.3rem auto -0.3rem var(--target-start); width: var(--target-width); border-inline: 1px solid rgba(112, 240, 173, .65); }
 .pace-marker { position: absolute; top: 50%; width: 1.25rem; height: 1.25rem; transform: translate(-50%, -50%) rotate(45deg); border: 3px solid #080b10; border-radius: 0.15rem; background: #fff; box-shadow: 0 0 0 2px #fff, 0 0 22px rgba(255,255,255,.65); transition: left 220ms ease-out; }
@@ -67,6 +75,19 @@ h1 { margin-top: 0.15rem; font: 600 clamp(1rem, 1.8vw, 1.45rem)/1.1 "Arial Narro
 
 .session-controls { min-height: 5.7rem; display: grid; place-items: center; align-content: center; }
 .summary { text-align: center; }
+.completed-view { width: min(62rem, 100%); margin: clamp(2rem, 6vh, 5rem) auto 0; padding-bottom: 3rem; }
+.completed-view > .primary-button { display: block; margin: 1.5rem auto 0; }
+.segment-recap { margin-top: 2rem; }
+.segment-recap h2 { margin: 0 0 1rem; font-size: 1.2rem; }
+.segment-list { display: grid; gap: .85rem; margin: 0; padding: 0; list-style: none; }
+.summary-segment { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(16rem, 1fr); border: 1px solid var(--line); border-radius: .7rem; background: rgba(19, 24, 32, .82); overflow: hidden; }
+.segment-copy { padding: 1rem 1.2rem; }
+.segment-analysis { display: grid; align-content: center; padding: 1rem 1.2rem; border-left: 1px solid var(--line); background: rgba(8, 11, 16, .28); }
+.segment-text { margin: 0; color: #e9edf2; line-height: 1.55; overflow-wrap: anywhere; }
+.segment-pace { display: flex; justify-content: space-between; gap: 1rem; margin-top: .7rem; color: var(--muted); font-size: .85rem; }
+.segment-value { font-variant-numeric: tabular-nums; color: #d9dde3; }
+.segment-pace [data-pace="green"] { color: var(--green); }
+.segment-pace [data-pace="red"] { color: var(--red); }
 .summary-metrics { display: grid; grid-template-columns: repeat(4, minmax(5rem, 1fr)); gap: .7rem; margin: 0 0 1rem; }
 .summary-metrics div { border: 1px solid var(--line); border-radius: .5rem; padding: .45rem .7rem; }
 .summary-metrics dt { color: var(--muted); font-size: .67rem; letter-spacing: .06em; text-transform: uppercase; }
@@ -96,6 +117,9 @@ button:disabled { cursor: wait; opacity: .58; }
   .speedometer { padding-inline: 1rem; }
   .pace-scale { width: 92vw; }
   .summary-metrics { grid-template-columns: repeat(2, minmax(7rem, 1fr)); }
+  .completed-view { margin-top: 2rem; }
+  .summary-segment { grid-template-columns: 1fr; }
+  .segment-analysis { border-top: 1px solid var(--line); border-left: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
