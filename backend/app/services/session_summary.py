@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections.abc import Iterable
 
-from app.services.wpm import PaceStatus, RecognizedWord, active_speech_duration, classify_pace
+from app.services.wpm import (
+    ActiveSpeechPolicy,
+    PaceStatus,
+    RecognizedWord,
+    classify_pace,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,11 +47,9 @@ class SessionSummaryCalculator:
     def __init__(
         self,
         *,
-        pause_threshold_seconds: float = 1.0,
-        minimum_active_seconds: float = 4.0,
+        policy: ActiveSpeechPolicy | None = None,
     ) -> None:
-        self._pause_threshold_seconds = pause_threshold_seconds
-        self._minimum_active_seconds = minimum_active_seconds
+        self._policy = ActiveSpeechPolicy() if policy is None else policy
 
     def build(self, finalized_chunks: Iterable[FinalizedChunk]) -> SessionSummary:
         """Calculate global metrics and segments from immutable final chunks."""
@@ -73,7 +76,10 @@ class SessionSummaryCalculator:
         pending: list[FinalizedChunk] = []
         for chunk in chunks:
             pending.append(chunk)
-            if self._active_seconds(pending) >= self._minimum_active_seconds:
+            if (
+                self._active_seconds(pending)
+                >= self._policy.minimum_active_seconds
+            ):
                 groups.append(tuple(pending))
                 pending = []
         if pending:
@@ -98,10 +104,8 @@ class SessionSummaryCalculator:
     def _calculate_pace_metrics(
         self, words: tuple[RecognizedWord, ...]
     ) -> tuple[float, float | None]:
-        active_seconds = active_speech_duration(words, self._pause_threshold_seconds)
-        average_pace = None
-        if active_seconds >= self._minimum_active_seconds:
-            average_pace = len(words) * 60 / active_seconds
+        active_seconds = self._policy.active_speech_seconds(words)
+        average_pace = self._policy.calculate_pace(len(words), active_seconds)
         return active_seconds, average_pace
 
 

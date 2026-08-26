@@ -23,7 +23,12 @@ from app.services.session_summary import (
     SessionSummaryCalculator,
     SummarySegment,
 )
-from app.services.wpm import PaceStatus, WpmMeasurement, classify_pace
+from app.services.wpm import (
+    ActiveSpeechPolicy,
+    PaceStatus,
+    WpmMeasurement,
+    classify_pace,
+)
 
 
 _diagnostic_logger = logging.getLogger("uvicorn.error.speech_speedometer.live_wpm")
@@ -197,8 +202,9 @@ class BrowserLiveWpmSession:
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
         self._stop_ack_timeout_seconds = stop_ack_timeout_seconds
         self._clock = clock
-        self._pipeline = LiveWpmPipeline()
-        self._summary_calculator = SessionSummaryCalculator()
+        policy = ActiveSpeechPolicy()
+        self._pipeline = LiveWpmPipeline(policy=policy)
+        self._summary_calculator = SessionSummaryCalculator(policy=policy)
         self._last_recognized_progress_at = clock()
         self._maximum_recognized_end: float | None = None
         self._diagnostics = (

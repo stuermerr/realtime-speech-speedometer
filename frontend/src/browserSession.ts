@@ -190,6 +190,7 @@ export class BrowserSession {
         return;
       }
       if (message.type === "stop_requested") {
+        this.dispatch({ type: "stop" });
         this.stop();
         return;
       }
