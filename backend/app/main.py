@@ -51,6 +51,7 @@ def create_app(
     live_policy = ActiveSpeechPolicy(
         minimum_active_seconds=live_wpm_settings.minimum_active_seconds
     )
+    live_wpm_calculator: ActiveSpeechWpm | DualWindowActiveSpeechWpm
     if live_wpm_settings.mode == "single":
         live_wpm_calculator = ActiveSpeechWpm(
             window_seconds=live_wpm_settings.window_seconds,

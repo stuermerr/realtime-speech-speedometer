@@ -13,13 +13,13 @@ from dotenv import dotenv_values
 
 BACKEND_DIRECTORY = Path(__file__).resolve().parents[2]
 BACKEND_ENV_PATH = BACKEND_DIRECTORY / ".env"
+LiveWpmMode = Literal["single", "dual"]
 LIVE_WPM_WINDOW_SECONDS = 5.0
 LIVE_WPM_MINIMUM_ACTIVE_SECONDS = 1.0
-LIVE_WPM_MODE = "single"
-LIVE_WPM_SHORT_WINDOW_SECONDS = 1.0
-LIVE_WPM_LONG_WINDOW_SECONDS = 3.0
-LIVE_WPM_SHORT_WEIGHT = 0.7
-LiveWpmMode = Literal["single", "dual"]
+LIVE_WPM_MODE: LiveWpmMode = "dual"
+LIVE_WPM_SHORT_WINDOW_SECONDS = 2.0
+LIVE_WPM_LONG_WINDOW_SECONDS = 10.0
+LIVE_WPM_SHORT_WEIGHT = 0.2
 
 
 class ConfigurationError(RuntimeError):

@@ -8,12 +8,6 @@ from app.core.config import (
     AzureSettings,
     ConfigurationError,
     DeepgramSettings,
-    LIVE_WPM_LONG_WINDOW_SECONDS,
-    LIVE_WPM_MINIMUM_ACTIVE_SECONDS,
-    LIVE_WPM_MODE,
-    LIVE_WPM_SHORT_WEIGHT,
-    LIVE_WPM_SHORT_WINDOW_SECONDS,
-    LIVE_WPM_WINDOW_SECONDS,
     LiveWpmDebugSettings,
     LiveWpmSettings,
     load_backend_environment,
@@ -152,15 +146,15 @@ def test_live_wpm_debug_logging_requires_explicit_boolean_value() -> None:
     assert str(caught.value) == "LIVE_WPM_DEBUG must be true or false"
 
 
-def test_live_wpm_settings_use_centralized_defaults() -> None:
+def test_live_wpm_settings_use_the_accepted_dual_window_defaults() -> None:
     settings = LiveWpmSettings.from_environment({})
 
-    assert settings.mode == LIVE_WPM_MODE
-    assert settings.window_seconds == LIVE_WPM_WINDOW_SECONDS
-    assert settings.minimum_active_seconds == LIVE_WPM_MINIMUM_ACTIVE_SECONDS
-    assert settings.short_window_seconds == LIVE_WPM_SHORT_WINDOW_SECONDS
-    assert settings.long_window_seconds == LIVE_WPM_LONG_WINDOW_SECONDS
-    assert settings.short_weight == LIVE_WPM_SHORT_WEIGHT
+    assert settings.mode == "dual"
+    assert settings.window_seconds == 5.0
+    assert settings.minimum_active_seconds == 1.0
+    assert settings.short_window_seconds == 2.0
+    assert settings.long_window_seconds == 10.0
+    assert settings.short_weight == 0.2
 
 
 def test_live_wpm_settings_support_the_opt_in_dual_window_profile() -> None:
