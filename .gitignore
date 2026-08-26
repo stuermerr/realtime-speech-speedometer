@@ -29,6 +29,7 @@ docs/graphify-out/cache/
 
 # Local scratch files
 .scratch/
+.tmp/
 .playwright-cli/
 *.log
 

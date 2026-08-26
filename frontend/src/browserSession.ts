@@ -158,6 +158,7 @@ export class BrowserSession {
   };
 
   private async finishStop(): Promise<void> {
+    // Drain queued recorder data before Stop so the provider receives the final audio.
     await this.sendChain;
     if (this.cleaned) return;
     const socket = this.socket;
