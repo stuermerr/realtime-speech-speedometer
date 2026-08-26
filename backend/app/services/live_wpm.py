@@ -13,6 +13,7 @@ from app.services.deepgram_transcription import (
 from app.services.wpm import (
     ActiveSpeechPolicy,
     ActiveSpeechWpm,
+    DualWindowActiveSpeechWpm,
     RecognizedWord,
     WpmMeasurement,
 )
@@ -66,7 +67,7 @@ class LiveWpmPipeline:
     def __init__(
         self,
         *,
-        calculator: ActiveSpeechWpm | None = None,
+        calculator: ActiveSpeechWpm | DualWindowActiveSpeechWpm | None = None,
         policy: ActiveSpeechPolicy | None = None,
     ) -> None:
         if calculator is not None and policy is not None:

@@ -87,15 +87,17 @@ Reason:
 
 ### 4.2 Rolling active-speech window
 
-Working concept:
+Canonical product default:
 
-- approximately **10 seconds of active speech** form the rolling measurement window;
+- a **Dual Window** blends 2 seconds of active speech at 20% with 10 seconds
+  at 80%;
+- 1 second of active speech is required before the first live value;
 - pauses should not count as speaking time;
-- the exact threshold and edge behavior remain configurable until tested with live microphone sessions.
+- Single Window remains a server-side fallback and tuning seam, not the product
+  default.
 
 Important:
 
-- `10 seconds` is an initial product parameter, not a fixed external requirement.
 - Do **not** hard-code a separate 2-second wall-clock hop.
 - Prefer **event-driven WPM recalculation** when new useful Deepgram `Results` data arrives.
 - Measurement-window size and UI update frequency are separate concerns.
@@ -270,7 +272,7 @@ MediaStream
   ↓
 MediaRecorder
   ↓
-WebM/Opus Blob approximately every 250 ms
+WebM/Opus Blob approximately every 100 ms
   ↓
 Browser WebSocket
   ↓
@@ -313,7 +315,7 @@ USER SEES "WPM: 132"
 
 The important boundary details are:
 
-- `MediaRecorder.start(250)` requests the approximately 250 ms transport
+- `MediaRecorder.start(100)` requests the approximately 100 ms transport
   cadence; it is not the WPM measurement clock.
 - FastAPI passes the containerized `audio/webm;codecs=opus` bytes to Deepgram
   without decoding, resampling, or transcoding them.

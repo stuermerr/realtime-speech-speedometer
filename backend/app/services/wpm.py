@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 
@@ -130,6 +130,53 @@ class ActiveSpeechWpm:
         )
 
 
+class DualWindowActiveSpeechWpm:
+    """Blend two stateless active-speech measurements from one timeline.
+
+    The returned measurement deliberately retains the long-window evidence
+    metadata for the existing live protocol. Its WPM is the authoritative
+    blended live pace and is not derived from those legacy metadata fields.
+    """
+
+    def __init__(
+        self,
+        *,
+        short_window_seconds: float,
+        long_window_seconds: float,
+        short_weight: float,
+        policy: ActiveSpeechPolicy | None = None,
+    ) -> None:
+        active_speech_policy = ActiveSpeechPolicy() if policy is None else policy
+        if not _is_finite_number(short_weight) or not 0.0 <= short_weight <= 1.0:
+            raise ValueError(
+                "Short window weight must be finite and between zero and one"
+            )
+        if short_window_seconds > long_window_seconds:
+            raise ValueError("Short active-speech window cannot exceed the long window")
+        self._short = ActiveSpeechWpm(
+            window_seconds=short_window_seconds,
+            policy=active_speech_policy,
+        )
+        self._long = ActiveSpeechWpm(
+            window_seconds=long_window_seconds,
+            policy=active_speech_policy,
+        )
+        self._short_weight = short_weight
+
+    def calculate(self, words: Iterable[RecognizedWord]) -> WpmMeasurement:
+        """Calculate both windows afresh from the complete current timeline."""
+        timeline = tuple(words)
+        short_measurement = self._short.calculate(timeline)
+        long_measurement = self._long.calculate(timeline)
+        if short_measurement.wpm is None or long_measurement.wpm is None:
+            return long_measurement
+        blended_wpm = (
+            self._short_weight * short_measurement.wpm
+            + (1.0 - self._short_weight) * long_measurement.wpm
+        )
+        return replace(long_measurement, wpm=blended_wpm)
+
+
 def _validate_configuration(
     *,
     window_seconds: float,
@@ -158,7 +205,11 @@ def _is_finite_positive(value: float) -> bool:
 
 
 def _is_finite_number(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
 
 
 def _active_speech_duration(

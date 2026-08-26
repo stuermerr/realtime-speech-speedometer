@@ -281,7 +281,7 @@ A yellow transition band may be added only if UX testing suggests it improves re
 
 ### Status
 
-**Accepted, parameter still tunable**
+**Accepted, with restart-only tuning overrides**
 
 ### Decision
 
@@ -289,10 +289,13 @@ The live WPM represents recent **active speaking pace**, not the average over th
 
 ### Product default
 
-- rolling window of **5 seconds of active speech**;
+- **Dual Window**: 2 seconds of active speech in the short window and 10
+  seconds in the long window;
+- blend **20% short-window pace / 80% long-window pace**;
 - **1 second of active speech** before live WPM is available;
 - pauses are not counted as speaking time;
-- exact pause threshold/window-edge handling remains configurable until live testing.
+- `single` remains a server-side fallback and tuning seam, not the product
+  default.
 
 ### Why
 
@@ -318,14 +321,17 @@ A short window reacts quickly but can be noisy.
 
 A long window is stable but reacts slowly.
 
-The active-speech window is a product default rather than a permanent constant.
+The active-speech windows and blend are product defaults rather than permanent
+constants. Validated restart-only overrides remain available for later
+microphone tuning.
 
 The shared calculation still uses complete word intervals and the one-second
-pause threshold. Its live window and live availability minimum are separate,
-restart-only server configuration values so microphone testing can tune the
-responsiveness/stability trade-off without changing provider-independent WPM
-semantics. The completed-summary availability minimum remains independently
-fixed at four active-speech seconds, even when the live minimum is tuned.
+pause threshold. Its live windows, blend, and availability minimum are
+separate, restart-only server configuration values so microphone testing can
+tune the responsiveness/stability trade-off without changing
+provider-independent WPM semantics. The completed-summary availability minimum
+remains independently fixed at four active-speech seconds, even when the live
+minimum is tuned.
 
 ### Evidence — issue #24 microphone comparison (2026-08-26)
 
@@ -337,14 +343,18 @@ provider-drained summary without browser-console errors.
 
 The 10/4 baseline was stable but first feedback required four active seconds,
 outside the approximately three-second responsiveness target. The 4/2 and 2/1
-profiles felt more responsive when changing between faster and slower speech;
-4/2 was initially selected because it is less reactive than 2/1. Follow-up
-comparisons also covered 5/2, 5/1, and 6/2 with the same read-aloud sequence.
-The operator selected 5/1 as the preferred responsiveness/stability trade-off,
-accepting that it can be more volatile than longer-window profiles. Therefore
-5/1 is the promoted default. The existing pause policy continued to respond
-after resumed speech without explicit context-break logic, so no pause-context
-feature is needed.
+profiles felt more responsive when changing between faster and slower speech.
+The existing pause policy continued to respond after resumed speech without
+explicit context-break logic, so no pause-context feature is needed.
+
+### Final default — issue #32 empirical decision (2026-08-26)
+
+The Dual Window comparison selected the 2s/10s, 20% short-window / 80%
+long-window profile with a one-second minimum as the canonical product default.
+It improves pace-correction feedback while retaining a long-window stabilizer.
+Single-window calculation remains available only as a validated server-side
+fallback and tuning seam; the WebSocket protocol, pause semantics, summaries,
+and pace segments are unchanged.
 
 ### Interview explanation
 
@@ -820,7 +830,7 @@ query omits `encoding`, `sample_rate`, and `channels`, allowing the provider to
 read framing from the WebM container. The historical fixed-sample spike keeps
 its explicit raw `linear16`, 24 kHz, mono mode unchanged.
 
-`MediaRecorder.start(250)` requests approximately 250 ms chunks. This value is
+`MediaRecorder.start(100)` requests approximately 100 ms chunks. This value is
 a transport cadence, not a speech clock; WPM continues to use provider word
 timestamps.
 
@@ -832,6 +842,11 @@ timestamps.
   command.
 - Current Chrome/Chromium exposes WebM/Opus through `MediaRecorder`; support is
   checked before microphone access.
+- A real microphone comparison of the same Dual 2s/8s, 30/70 profile found
+  100 ms visibly more responsive than 250 ms. The secret-safe diagnostic run
+  forwarded 832 audio chunks and received 141 Deepgram `Results`, producing
+  113 timeline-changing measurements in approximately 100 seconds, without
+  browser-console errors.
 
 See:
 
