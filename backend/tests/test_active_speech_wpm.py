@@ -4,11 +4,54 @@ import math
 
 import pytest
 
-from app.services.wpm import ActiveSpeechWpm, RecognizedWord, classify_pace
+from app.services.wpm import (
+    ActiveSpeechPolicy,
+    ActiveSpeechWpm,
+    RecognizedWord,
+    classify_pace,
+)
 
 
 def word(index: int, start: float, end: float) -> RecognizedWord:
     return RecognizedWord(text=f"word-{index}", start_seconds=start, end_seconds=end)
+
+
+def test_active_speech_policy_owns_duration_availability_and_pace() -> None:
+    policy = ActiveSpeechPolicy(
+        pause_threshold_seconds=0.75,
+        minimum_active_seconds=2.0,
+    )
+
+    active_seconds = policy.active_speech_seconds(
+        (
+            word(0, 0.0, 0.5),
+            word(1, 1.0, 1.5),
+            word(2, 2.5, 3.5),
+        )
+    )
+
+    assert active_seconds == 2.5
+    assert policy.calculate_pace(3, active_seconds) == 72.0
+    assert policy.calculate_pace(2, 1.5) is None
+
+
+def test_live_wpm_uses_the_shared_active_speech_policy() -> None:
+    policy = ActiveSpeechPolicy(
+        pause_threshold_seconds=0.75,
+        minimum_active_seconds=2.0,
+    )
+    meter = ActiveSpeechWpm(policy=policy)
+
+    measurement = meter.calculate(
+        (
+            word(0, 0.0, 0.5),
+            word(1, 1.0, 1.5),
+            word(2, 2.5, 3.5),
+        )
+    )
+
+    assert measurement.active_speech_seconds == 2.5
+    assert measurement.wpm == 72.0
 
 
 def test_continuous_speech_reports_unrounded_wpm() -> None:
@@ -158,18 +201,29 @@ def test_empty_and_one_word_states_have_no_wpm() -> None:
     assert one_word_measurement.audio_end_seconds == 7.5
 
 
+def test_invalid_window_configuration_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        ActiveSpeechWpm(window_seconds=0.0)
+
+
 @pytest.mark.parametrize(
-    ("kwargs"),
+    "kwargs",
     [
-        {"window_seconds": 0.0},
         {"pause_threshold_seconds": math.inf},
         {"minimum_active_seconds": math.nan},
-        {"window_seconds": 3.0, "minimum_active_seconds": 4.0},
     ],
 )
-def test_invalid_configuration_is_rejected(kwargs: dict[str, float]) -> None:
+def test_invalid_policy_configuration_is_rejected(kwargs: dict[str, float]) -> None:
     with pytest.raises(ValueError):
-        ActiveSpeechWpm(**kwargs)
+        ActiveSpeechPolicy(**kwargs)
+
+
+def test_policy_minimum_cannot_exceed_the_live_window() -> None:
+    with pytest.raises(ValueError):
+        ActiveSpeechWpm(
+            window_seconds=3.0,
+            policy=ActiveSpeechPolicy(minimum_active_seconds=4.0),
+        )
 
 
 @pytest.mark.parametrize(

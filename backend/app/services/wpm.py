@@ -38,6 +38,31 @@ class WpmMeasurement:
     audio_end_seconds: float | None
 
 
+@dataclass(frozen=True, slots=True)
+class ActiveSpeechPolicy:
+    """Shared active-speech duration and pace-availability policy."""
+
+    pause_threshold_seconds: float = 1.0
+    minimum_active_seconds: float = 4.0
+
+    def __post_init__(self) -> None:
+        if not all(
+            _is_finite_positive(value)
+            for value in (self.pause_threshold_seconds, self.minimum_active_seconds)
+        ):
+            raise ValueError("Active-speech policy values must be finite and positive")
+
+    def active_speech_seconds(self, words: tuple[RecognizedWord, ...]) -> float:
+        return _active_speech_duration(words, self.pause_threshold_seconds)
+
+    def calculate_pace(
+        self, word_count: int, active_speech_seconds: float
+    ) -> float | None:
+        if active_speech_seconds < self.minimum_active_seconds:
+            return None
+        return word_count * 60 / active_speech_seconds
+
+
 class ActiveSpeechWpm:
     """Calculate recent active-speech pace from a complete word timeline."""
 
@@ -45,17 +70,16 @@ class ActiveSpeechWpm:
         self,
         *,
         window_seconds: float = 10.0,
-        pause_threshold_seconds: float = 1.0,
-        minimum_active_seconds: float = 4.0,
+        policy: ActiveSpeechPolicy | None = None,
     ) -> None:
+        active_speech_policy = ActiveSpeechPolicy() if policy is None else policy
         _validate_configuration(
             window_seconds=window_seconds,
-            pause_threshold_seconds=pause_threshold_seconds,
-            minimum_active_seconds=minimum_active_seconds,
+            policy=active_speech_policy,
         )
         self._window_seconds = window_seconds
-        self._pause_threshold_seconds = pause_threshold_seconds
-        self._minimum_active_seconds = minimum_active_seconds
+        self._policy = active_speech_policy
+
     def calculate(self, words: Iterable[RecognizedWord]) -> WpmMeasurement:
         """Validate a complete timeline and calculate its current measurement."""
         timeline = tuple(words)
@@ -79,7 +103,7 @@ class ActiveSpeechWpm:
             start_index -= 1
             selected_words = words[start_index:]
             if (
-                active_speech_duration(selected_words, self._pause_threshold_seconds)
+                self._policy.active_speech_seconds(selected_words)
                 >= self._window_seconds
             ):
                 return selected_words
@@ -95,12 +119,8 @@ class ActiveSpeechWpm:
                 audio_end_seconds=None,
             )
 
-        active_speech_seconds = active_speech_duration(
-            words, self._pause_threshold_seconds
-        )
-        wpm = None
-        if active_speech_seconds >= self._minimum_active_seconds:
-            wpm = len(words) * 60 / active_speech_seconds
+        active_speech_seconds = self._policy.active_speech_seconds(words)
+        wpm = self._policy.calculate_pace(len(words), active_speech_seconds)
         return WpmMeasurement(
             wpm=wpm,
             word_count=len(words),
@@ -113,13 +133,11 @@ class ActiveSpeechWpm:
 def _validate_configuration(
     *,
     window_seconds: float,
-    pause_threshold_seconds: float,
-    minimum_active_seconds: float,
+    policy: ActiveSpeechPolicy,
 ) -> None:
-    values = (window_seconds, pause_threshold_seconds, minimum_active_seconds)
-    if not all(_is_finite_positive(value) for value in values):
-        raise ValueError("WPM configuration values must be finite and positive")
-    if minimum_active_seconds > window_seconds:
+    if not _is_finite_positive(window_seconds):
+        raise ValueError("WPM window must be finite and positive")
+    if policy.minimum_active_seconds > window_seconds:
         raise ValueError("Minimum active speech cannot exceed the active-speech window")
 
 
@@ -143,7 +161,7 @@ def _is_finite_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def active_speech_duration(
+def _active_speech_duration(
     words: tuple[RecognizedWord, ...], pause_threshold_seconds: float
 ) -> float:
     if not words:

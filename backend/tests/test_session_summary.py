@@ -1,5 +1,5 @@
 from app.services.session_summary import FinalizedChunk, SessionSummaryCalculator
-from app.services.wpm import RecognizedWord
+from app.services.wpm import ActiveSpeechPolicy, RecognizedWord
 
 
 def word(index: int, start: float, end: float) -> RecognizedWord:
@@ -21,6 +21,24 @@ def test_summary_uses_the_complete_finalized_timeline_not_live_measurements() ->
     assert summary.active_speaking_seconds == 4.0
     assert summary.average_speaking_pace == 75.0
     assert summary.presentation_duration_seconds == 6.5
+
+
+def test_summary_uses_the_shared_active_speech_policy_for_all_pace_views() -> None:
+    policy = ActiveSpeechPolicy(
+        pause_threshold_seconds=0.75,
+        minimum_active_seconds=1.5,
+    )
+
+    summary = SessionSummaryCalculator(policy=policy).build(
+        (
+            FinalizedChunk("First", (word(0, 0.0, 0.5),)),
+            FinalizedChunk("second", (word(1, 1.0, 1.5),)),
+        )
+    )
+
+    assert summary.active_speaking_seconds == 1.5
+    assert summary.average_speaking_pace == 80.0
+    assert [segment.average_speaking_pace for segment in summary.segments] == [80.0]
 
 
 def test_short_and_empty_summaries_are_honest() -> None:

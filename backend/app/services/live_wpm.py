@@ -10,7 +10,12 @@ from app.services.deepgram_transcription import (
     ParsedDeepgramResult,
     parse_deepgram_event,
 )
-from app.services.wpm import ActiveSpeechWpm, RecognizedWord, WpmMeasurement
+from app.services.wpm import (
+    ActiveSpeechPolicy,
+    ActiveSpeechWpm,
+    RecognizedWord,
+    WpmMeasurement,
+)
 from app.services.session_summary import FinalizedChunk
 
 
@@ -58,9 +63,9 @@ class SessionWordState:
 class LiveWpmPipeline:
     """Reconcile one session's Results and calculate changed timelines."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, policy: ActiveSpeechPolicy | None = None) -> None:
         self._word_state = SessionWordState()
-        self._calculator = ActiveSpeechWpm()
+        self._calculator = ActiveSpeechWpm(policy=policy)
 
     def process_result(
         self, result: ParsedDeepgramResult
