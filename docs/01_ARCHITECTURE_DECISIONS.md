@@ -289,8 +289,8 @@ The live WPM represents recent **active speaking pace**, not the average over th
 
 ### Product default
 
-- rolling window of **4 seconds of active speech**;
-- **2 seconds of active speech** before live WPM is available;
+- rolling window of **5 seconds of active speech**;
+- **1 second of active speech** before live WPM is available;
 - pauses are not counted as speaking time;
 - exact pause threshold/window-edge handling remains configurable until live testing.
 
@@ -338,11 +338,13 @@ provider-drained summary without browser-console errors.
 The 10/4 baseline was stable but first feedback required four active seconds,
 outside the approximately three-second responsiveness target. The 4/2 and 2/1
 profiles felt more responsive when changing between faster and slower speech;
-4/2 is preferred because it is less reactive than 2/1. Its higher volatility
-than 6/3 is accepted as the better trade-off for the live-feedback goal.
-Therefore 4/2 is the promoted default. The existing pause policy continued to
-respond after resumed speech without explicit context-break logic, so no
-pause-context feature is needed.
+4/2 was initially selected because it is less reactive than 2/1. Follow-up
+comparisons also covered 5/2, 5/1, and 6/2 with the same read-aloud sequence.
+The operator selected 5/1 as the preferred responsiveness/stability trade-off,
+accepting that it can be more volatile than longer-window profiles. Therefore
+5/1 is the promoted default. The existing pause policy continued to respond
+after resumed speech without explicit context-break logic, so no pause-context
+feature is needed.
 
 ### Interview explanation
 
