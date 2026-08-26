@@ -287,9 +287,10 @@ A yellow transition band may be added only if UX testing suggests it improves re
 
 The live WPM represents recent **active speaking pace**, not the average over the entire session.
 
-### Initial concept
+### Product default
 
-- rolling window of approximately **10 seconds of active speech**;
+- rolling window of **5 seconds of active speech**;
+- **1 second of active speech** before live WPM is available;
 - pauses are not counted as speaking time;
 - exact pause threshold/window-edge handling remains configurable until live testing.
 
@@ -317,7 +318,33 @@ A short window reacts quickly but can be noisy.
 
 A long window is stable but reacts slowly.
 
-Approximately ten active-speech seconds is the initial compromise, not a permanent constant.
+The active-speech window is a product default rather than a permanent constant.
+
+The shared calculation still uses complete word intervals and the one-second
+pause threshold. Its live window and live availability minimum are separate,
+restart-only server configuration values so microphone testing can tune the
+responsiveness/stability trade-off without changing provider-independent WPM
+semantics. The completed-summary availability minimum remains independently
+fixed at four active-speech seconds, even when the live minimum is tuned.
+
+### Evidence — issue #24 microphone comparison (2026-08-26)
+
+Tested the baseline **10/4**, balanced **6/3**, responsive **4/2**, and very
+responsive **2/1** profiles with steady speech, slow-to-fast and fast-to-slow
+changes, a short hesitation, an approximately three-second pause, and faster
+and slower resumed speech. Each run produced live measurements and a normal
+provider-drained summary without browser-console errors.
+
+The 10/4 baseline was stable but first feedback required four active seconds,
+outside the approximately three-second responsiveness target. The 4/2 and 2/1
+profiles felt more responsive when changing between faster and slower speech;
+4/2 was initially selected because it is less reactive than 2/1. Follow-up
+comparisons also covered 5/2, 5/1, and 6/2 with the same read-aloud sequence.
+The operator selected 5/1 as the preferred responsiveness/stability trade-off,
+accepting that it can be more volatile than longer-window profiles. Therefore
+5/1 is the promoted default. The existing pause policy continued to respond
+after resumed speech without explicit context-break logic, so no pause-context
+feature is needed.
 
 ### Interview explanation
 
@@ -966,8 +993,10 @@ The global summary contains four unrounded quantitative values:
 - `active_speaking_seconds`;
 - `presentation_duration_seconds`.
 
-Active speech uses the same policy as live WPM: word intervals and gaps below
-one second count; gaps of one second or more do not. Presentation duration is
+Active speech uses the same interval and gap semantics as live WPM: word
+intervals and gaps below one second count; gaps of one second or more do not.
+Its availability minimum remains fixed at four active-speech seconds,
+independently of the configurable live WPM minimum. Presentation duration is
 the first finalized word start through the last finalized word end. It is not
 wall-clock session time and the summary pace is never an average of rolling
 live measurements. An empty finalized timeline produces a valid empty summary.
