@@ -7,6 +7,7 @@ import pytest
 from app.services.wpm import (
     ActiveSpeechPolicy,
     ActiveSpeechWpm,
+    DualWindowActiveSpeechWpm,
     RecognizedWord,
     classify_pace,
 )
@@ -109,17 +110,21 @@ def test_short_gaps_count_as_active_speech() -> None:
 def test_long_pause_keeps_pre_pause_speech_until_window_advances() -> None:
     meter = ActiveSpeechWpm()
     before_pause = [word(index, index * 0.5, (index + 1) * 0.5) for index in range(6)]
-    after_pause = [word(index + 6, 10 + index * 0.5, 10 + (index + 1) * 0.5) for index in range(4)]
+    after_pause = [
+        word(index + 6, 10 + index * 0.5, 10 + (index + 1) * 0.5) for index in range(4)
+    ]
 
     paused_measurement = meter.calculate([*before_pause, *after_pause])
-    advanced_measurement = meter.calculate([
-        *before_pause,
-        *after_pause,
-        *[
-            word(index + 10, 12 + index * 0.5, 12 + (index + 1) * 0.5)
-            for index in range(16)
-        ],
-    ])
+    advanced_measurement = meter.calculate(
+        [
+            *before_pause,
+            *after_pause,
+            *[
+                word(index + 10, 12 + index * 0.5, 12 + (index + 1) * 0.5)
+                for index in range(16)
+            ],
+        ]
+    )
 
     assert paused_measurement.word_count == 10
     assert paused_measurement.active_speech_seconds == 5.0
@@ -158,9 +163,7 @@ def test_window_rolls_forward_and_prunes_irrelevant_history() -> None:
 def test_exact_pause_threshold_is_excluded_from_active_speech() -> None:
     meter = ActiveSpeechWpm()
 
-    measurement = meter.calculate(
-        [word(0, 0.0, 2.0), word(1, 3.0, 5.0)]
-    )
+    measurement = meter.calculate([word(0, 0.0, 2.0), word(1, 3.0, 5.0)])
 
     assert measurement.active_speech_seconds == 4.0
     assert measurement.wpm == 30.0
@@ -252,9 +255,7 @@ def test_complete_timeline_requires_non_decreasing_starts() -> None:
 def test_timeline_accepts_slightly_overlapping_adjacent_words() -> None:
     meter = ActiveSpeechWpm()
 
-    measurement = meter.calculate(
-        [word(0, 0.0, 2.0), word(1, 1.9, 4.0)]
-    )
+    measurement = meter.calculate([word(0, 0.0, 2.0), word(1, 1.9, 4.0)])
 
     assert measurement.active_speech_seconds == 4.0
     assert measurement.wpm == 30.0
@@ -291,4 +292,80 @@ def test_invalid_timeline_does_not_affect_later_calculations() -> None:
     with pytest.raises(ValueError):
         meter.calculate([*valid_timeline, word(99, 2.0, 2.5)])
 
-    assert meter.calculate(valid_timeline) == ActiveSpeechWpm().calculate(valid_timeline)
+    assert meter.calculate(valid_timeline) == ActiveSpeechWpm().calculate(
+        valid_timeline
+    )
+
+
+def test_dual_window_blends_short_and_growing_long_measurements() -> None:
+    policy = ActiveSpeechPolicy(minimum_active_seconds=1.0)
+    timeline = (
+        word(0, 0.0, 0.5),
+        word(1, 0.5, 1.0),
+        word(2, 1.0, 1.5),
+        word(3, 1.5, 1.75),
+        word(4, 1.75, 2.0),
+        word(5, 2.0, 2.25),
+        word(6, 2.25, 2.5),
+    )
+    meter = DualWindowActiveSpeechWpm(
+        short_window_seconds=1.0,
+        long_window_seconds=3.0,
+        short_weight=0.7,
+        policy=policy,
+    )
+
+    measurement = meter.calculate(timeline)
+
+    assert measurement.wpm == pytest.approx(218.4)
+
+
+@pytest.mark.parametrize(
+    ("short_weight", "expected_wpm"),
+    [(0.0, 168.0), (1.0, 240.0)],
+)
+def test_dual_window_supports_boundary_weights(
+    short_weight: float, expected_wpm: float
+) -> None:
+    meter = DualWindowActiveSpeechWpm(
+        short_window_seconds=1.0,
+        long_window_seconds=3.0,
+        short_weight=short_weight,
+        policy=ActiveSpeechPolicy(minimum_active_seconds=1.0),
+    )
+    timeline = (
+        word(0, 0.0, 0.5),
+        word(1, 0.5, 1.0),
+        word(2, 1.0, 1.5),
+        word(3, 1.5, 1.75),
+        word(4, 1.75, 2.0),
+        word(5, 2.0, 2.25),
+        word(6, 2.25, 2.5),
+    )
+
+    assert meter.calculate(timeline).wpm == expected_wpm
+
+
+def test_dual_window_recalculates_without_retaining_a_prior_blend() -> None:
+    policy = ActiveSpeechPolicy(minimum_active_seconds=1.0)
+    meter = DualWindowActiveSpeechWpm(
+        short_window_seconds=1.0,
+        long_window_seconds=3.0,
+        short_weight=0.7,
+        policy=policy,
+    )
+    prior_timeline = tuple(
+        word(index, index * 0.5, (index + 1) * 0.5) for index in range(6)
+    )
+    revised_timeline = tuple(
+        word(index, index * 0.25, (index + 1) * 0.25) for index in range(6)
+    )
+
+    meter.calculate(prior_timeline)
+
+    assert meter.calculate(revised_timeline) == DualWindowActiveSpeechWpm(
+        short_window_seconds=1.0,
+        long_window_seconds=3.0,
+        short_weight=0.7,
+        policy=policy,
+    ).calculate(revised_timeline)

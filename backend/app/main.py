@@ -22,7 +22,11 @@ from app.services.deepgram_transcription import (
     DeepgramAudioMode,
     DeepgramTranscriptionSession,
 )
-from app.services.wpm import ActiveSpeechPolicy, ActiveSpeechWpm
+from app.services.wpm import (
+    ActiveSpeechPolicy,
+    ActiveSpeechWpm,
+    DualWindowActiveSpeechWpm,
+)
 
 
 FRONTEND_DIRECTORY = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -44,12 +48,21 @@ def create_app(
     application = FastAPI(title="Speech Speedometer")
     make_provider = _browser_provider if provider_factory is None else provider_factory
     live_wpm_settings = LiveWpmSettings.from_environment()
-    live_wpm_calculator = ActiveSpeechWpm(
-        window_seconds=live_wpm_settings.window_seconds,
-        policy=ActiveSpeechPolicy(
-            minimum_active_seconds=live_wpm_settings.minimum_active_seconds
-        ),
+    live_policy = ActiveSpeechPolicy(
+        minimum_active_seconds=live_wpm_settings.minimum_active_seconds
     )
+    if live_wpm_settings.mode == "single":
+        live_wpm_calculator = ActiveSpeechWpm(
+            window_seconds=live_wpm_settings.window_seconds,
+            policy=live_policy,
+        )
+    else:
+        live_wpm_calculator = DualWindowActiveSpeechWpm(
+            short_window_seconds=live_wpm_settings.short_window_seconds,
+            long_window_seconds=live_wpm_settings.long_window_seconds,
+            short_weight=live_wpm_settings.short_weight,
+            policy=live_policy,
+        )
     summary_policy = ActiveSpeechPolicy()
     debug_logging_enabled = LiveWpmDebugSettings.from_environment().enabled
     assets_directory = frontend_directory / "assets"
@@ -91,7 +104,11 @@ def create_app(
                 summary_policy=summary_policy,
                 diagnostics=LiveWpmDiagnostics(
                     enabled=debug_logging_enabled,
-                    live_window_seconds=live_wpm_settings.window_seconds,
+                    live_window_seconds=(
+                        live_wpm_settings.window_seconds
+                        if live_wpm_settings.mode == "single"
+                        else None
+                    ),
                     live_minimum_active_seconds=(
                         live_wpm_settings.minimum_active_seconds
                     ),
