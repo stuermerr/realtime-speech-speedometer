@@ -13,7 +13,11 @@ from app.services.deepgram_transcription import (
 )
 from app.services.live_wpm import LiveWpmPipeline, SessionWordState
 from app.services.session_summary import FinalizedChunk
-from app.services.wpm import RecognizedWord
+from app.services.wpm import (
+    ActiveSpeechPolicy,
+    DualWindowActiveSpeechWpm,
+    RecognizedWord,
+)
 from spikes.run_deepgram_transcription import run_probe
 from spikes.run_realtime_transcription import NormalizedAudio
 
@@ -29,9 +33,7 @@ def word(text: str, start: float, end: float) -> RecognizedWord:
     return RecognizedWord(text, start, end)
 
 
-def result(
-    *words: RecognizedWord, is_final: bool = False
-) -> ParsedDeepgramResult:
+def result(*words: RecognizedWord, is_final: bool = False) -> ParsedDeepgramResult:
     return ParsedDeepgramResult(
         is_final=is_final,
         text=" ".join(word.text for word in words),
@@ -88,9 +90,10 @@ def test_interim_results_replace_the_complete_visible_tail() -> None:
     assert state.apply_result(result(word("hello", 0.0, 0.5))) is True
     assert state.words == (word("hello", 0.0, 0.5),)
 
-    assert state.apply_result(
-        result(word("hello", 0.0, 0.4), word("there", 0.5, 1.0))
-    ) is True
+    assert (
+        state.apply_result(result(word("hello", 0.0, 0.4), word("there", 0.5, 1.0)))
+        is True
+    )
     assert list(state.words) == [
         word("hello", 0.0, 0.4),
         word("there", 0.5, 1.0),
@@ -104,14 +107,10 @@ def test_final_results_discard_interim_and_accumulate_authoritative_chunks() -> 
     state = SessionWordState()
     state.apply_result(result(word("draft", 0.0, 0.4)))
 
-    assert state.apply_result(
-        result(word("final", 0.0, 0.5), is_final=True)
-    ) is True
+    assert state.apply_result(result(word("final", 0.0, 0.5), is_final=True)) is True
     assert state.words == (word("final", 0.0, 0.5),)
 
-    assert state.apply_result(
-        result(word("history", 0.6, 1.1), is_final=True)
-    ) is True
+    assert state.apply_result(result(word("history", 0.6, 1.1), is_final=True)) is True
     assert list(state.words) == [
         word("final", 0.0, 0.5),
         word("history", 0.6, 1.1),
@@ -169,8 +168,7 @@ def test_pipeline_distinguishes_unchanged_from_unavailable_measurement() -> None
 def test_pipeline_recalculates_revised_interim_and_not_identical_finalization() -> None:
     pipeline = LiveWpmPipeline()
     initial = tuple(
-        word(f"word-{index}", index * 0.5, (index + 1) * 0.5)
-        for index in range(8)
+        word(f"word-{index}", index * 0.5, (index + 1) * 0.5) for index in range(8)
     )
     revised = (*initial[:-1], word("revised", 3.5, 4.0))
 
@@ -182,11 +180,33 @@ def test_pipeline_recalculates_revised_interim_and_not_identical_finalization() 
     assert pipeline.process_result(result(*revised, is_final=True)) is None
 
 
+def test_dual_window_pipeline_recalculates_a_replaced_interim_timeline() -> None:
+    pipeline = LiveWpmPipeline(
+        calculator=DualWindowActiveSpeechWpm(
+            short_window_seconds=1.0,
+            long_window_seconds=3.0,
+            short_weight=0.7,
+            policy=ActiveSpeechPolicy(minimum_active_seconds=1.0),
+        )
+    )
+    slow = tuple(
+        word(f"slow-{index}", index * 0.5, (index + 1) * 0.5) for index in range(4)
+    )
+    fast = tuple(
+        word(f"fast-{index}", index * 0.25, (index + 1) * 0.25) for index in range(4)
+    )
+
+    first = pipeline.process_result(result(*slow))
+    second = pipeline.process_result(result(*fast))
+
+    assert first is not None and first.wpm == 120.0
+    assert second is not None and second.wpm == 240.0
+
+
 def test_provider_events_flow_through_parsing_reconciliation_and_wpm() -> None:
     pipeline = LiveWpmPipeline()
     words = tuple(
-        word(f"word-{index}", index * 0.5, (index + 1) * 0.5)
-        for index in range(8)
+        word(f"word-{index}", index * 0.5, (index + 1) * 0.5) for index in range(8)
     )
 
     assert pipeline.process_event({"type": "SpeechStarted"}) is None
@@ -233,8 +253,7 @@ def test_provider_service_error_propagates_from_event_measurements() -> None:
 
 def test_fixed_sample_probe_records_live_wpm_measurements() -> None:
     words = tuple(
-        word(f"word-{index}", index * 0.5, (index + 1) * 0.5)
-        for index in range(8)
+        word(f"word-{index}", index * 0.5, (index + 1) * 0.5) for index in range(8)
     )
 
     class ProbeSession:

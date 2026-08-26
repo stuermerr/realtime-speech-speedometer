@@ -5,6 +5,10 @@ feedback about speaking pace. A React/TypeScript presentation UI streams
 browser microphone audio through FastAPI to Deepgram and renders the backend's
 deterministic live WPM and red/green pace classification.
 
+The canonical live pace default is a Dual Window: 2 seconds at 20% blended
+with 10 seconds at 80%, available after 1 active-speaking second. Single Window
+is retained as a server-side fallback and tuning seam.
+
 ## Repository layout
 
 ```text
@@ -123,7 +127,7 @@ MediaStream
   ↓
 MediaRecorder
   ↓
-WebM/Opus Blob approximately every 250 ms
+WebM/Opus Blob approximately every 100 ms
   ↓
 Browser WebSocket
   ↓
@@ -164,7 +168,7 @@ JavaScript updates the HTML
 USER SEES "WPM: 132"
 ```
 
-`MediaRecorder.start(250)` defines the approximate transport cadence, not the
+`MediaRecorder.start(100)` defines the approximate transport cadence, not the
 WPM clock. FastAPI forwards the containerized `audio/webm;codecs=opus` bytes
 without transcoding. WPM is calculated from Deepgram's word timestamps on the
 audio timeline, never from network receive time. During a pause no changed word

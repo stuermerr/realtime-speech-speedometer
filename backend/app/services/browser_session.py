@@ -26,6 +26,7 @@ from app.services.session_summary import (
 from app.services.wpm import (
     ActiveSpeechPolicy,
     ActiveSpeechWpm,
+    DualWindowActiveSpeechWpm,
     PaceStatus,
     WpmMeasurement,
     classify_pace,
@@ -199,7 +200,7 @@ class BrowserLiveWpmSession:
         browser: BrowserWebSocket,
         provider: BrowserDeepgramSession,
         *,
-        live_wpm_calculator: ActiveSpeechWpm | None = None,
+        live_wpm_calculator: ActiveSpeechWpm | DualWindowActiveSpeechWpm | None = None,
         summary_policy: ActiveSpeechPolicy | None = None,
         diagnostics: LiveWpmDiagnostics | None = None,
         drain_timeout_seconds: float = 5.0,

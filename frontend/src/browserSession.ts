@@ -1,7 +1,7 @@
 import type { PaceStatus, SessionAction, SessionSummary, SummarySegment } from "./state";
 
 const MIME_TYPE = "audio/webm;codecs=opus";
-const CHUNK_MILLISECONDS = 250;
+const CHUNK_MILLISECONDS = 100;
 const CONNECTION_TIMEOUT_MILLISECONDS = 10_000;
 
 interface TrackPort {

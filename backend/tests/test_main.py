@@ -181,6 +181,59 @@ def test_live_wpm_environment_configures_live_without_changing_summary(
     assert summary["average_speaking_pace"] is None
 
 
+def test_dual_live_wpm_environment_keeps_the_existing_message_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LIVE_WPM_MODE", "dual")
+    monkeypatch.setenv("LIVE_WPM_SHORT_WINDOW_SECONDS", "1")
+    monkeypatch.setenv("LIVE_WPM_LONG_WINDOW_SECONDS", "3")
+    monkeypatch.setenv("LIVE_WPM_SHORT_WEIGHT", "0.7")
+    monkeypatch.setenv("LIVE_WPM_MINIMUM_ACTIVE_SECONDS", "1")
+    provider = EndpointProvider(
+        [
+            {
+                "type": "Results",
+                "is_final": True,
+                "channel": {
+                    "alternatives": [
+                        {
+                            "transcript": "one two three four five six seven",
+                            "words": [
+                                {"word": "one", "start": 0.0, "end": 0.5},
+                                {"word": "two", "start": 0.5, "end": 1.0},
+                                {"word": "three", "start": 1.0, "end": 1.5},
+                                {"word": "four", "start": 1.5, "end": 1.75},
+                                {"word": "five", "start": 1.75, "end": 2.0},
+                                {"word": "six", "start": 2.0, "end": 2.25},
+                                {"word": "seven", "start": 2.25, "end": 2.5},
+                            ],
+                        }
+                    ]
+                },
+            }
+        ]
+    )
+    client = TestClient(create_app(provider_factory=lambda: provider))
+
+    with client.websocket_connect("/ws/live") as websocket:
+        websocket.send_json({"type": "stop"})
+        measurement = websocket.receive_json()
+        summary = websocket.receive_json()
+
+    assert measurement["wpm"] == pytest.approx(218.4)
+    assert measurement["pace_status"] == "red"
+    assert set(measurement) == {
+        "type",
+        "wpm",
+        "pace_status",
+        "word_count",
+        "active_speech_seconds",
+        "audio_start_seconds",
+        "audio_end_seconds",
+    }
+    assert summary["average_speaking_pace"] is None
+
+
 def test_missing_server_configuration_is_reported_without_details() -> None:
     def unavailable_provider() -> EndpointProvider:
         raise ConfigurationError("DEEPGRAM_API_KEY=provider-secret")

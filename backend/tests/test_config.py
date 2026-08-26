@@ -8,8 +8,6 @@ from app.core.config import (
     AzureSettings,
     ConfigurationError,
     DeepgramSettings,
-    LIVE_WPM_MINIMUM_ACTIVE_SECONDS,
-    LIVE_WPM_WINDOW_SECONDS,
     LiveWpmDebugSettings,
     LiveWpmSettings,
     load_backend_environment,
@@ -148,11 +146,32 @@ def test_live_wpm_debug_logging_requires_explicit_boolean_value() -> None:
     assert str(caught.value) == "LIVE_WPM_DEBUG must be true or false"
 
 
-def test_live_wpm_settings_use_centralized_defaults() -> None:
+def test_live_wpm_settings_use_the_accepted_dual_window_defaults() -> None:
     settings = LiveWpmSettings.from_environment({})
 
-    assert settings.window_seconds == LIVE_WPM_WINDOW_SECONDS
-    assert settings.minimum_active_seconds == LIVE_WPM_MINIMUM_ACTIVE_SECONDS
+    assert settings.mode == "dual"
+    assert settings.window_seconds == 5.0
+    assert settings.minimum_active_seconds == 1.0
+    assert settings.short_window_seconds == 2.0
+    assert settings.long_window_seconds == 10.0
+    assert settings.short_weight == 0.2
+
+
+def test_live_wpm_settings_support_the_opt_in_dual_window_profile() -> None:
+    settings = LiveWpmSettings.from_environment(
+        {
+            "LIVE_WPM_MODE": "dual",
+            "LIVE_WPM_SHORT_WINDOW_SECONDS": "1",
+            "LIVE_WPM_LONG_WINDOW_SECONDS": "3",
+            "LIVE_WPM_SHORT_WEIGHT": "0.7",
+            "LIVE_WPM_MINIMUM_ACTIVE_SECONDS": "1",
+        }
+    )
+
+    assert settings.mode == "dual"
+    assert settings.short_window_seconds == 1.0
+    assert settings.long_window_seconds == 3.0
+    assert settings.short_weight == 0.7
 
 
 @pytest.mark.parametrize(
@@ -188,6 +207,35 @@ def test_live_wpm_settings_use_centralized_defaults() -> None:
             },
             "LIVE_WPM_MINIMUM_ACTIVE_SECONDS",
             "4",
+        ),
+        ({"LIVE_WPM_MODE": "other"}, "LIVE_WPM_MODE", "other"),
+        (
+            {
+                "LIVE_WPM_MODE": "dual",
+                "LIVE_WPM_SHORT_WINDOW_SECONDS": "4",
+                "LIVE_WPM_LONG_WINDOW_SECONDS": "3",
+            },
+            "LIVE_WPM_SHORT_WINDOW_SECONDS",
+            "4",
+        ),
+        (
+            {
+                "LIVE_WPM_MODE": "dual",
+                "LIVE_WPM_SHORT_WINDOW_SECONDS": "1",
+                "LIVE_WPM_MINIMUM_ACTIVE_SECONDS": "2",
+            },
+            "LIVE_WPM_MINIMUM_ACTIVE_SECONDS",
+            "2",
+        ),
+        (
+            {"LIVE_WPM_SHORT_WEIGHT": "infinity"},
+            "LIVE_WPM_SHORT_WEIGHT",
+            "infinity",
+        ),
+        (
+            {"LIVE_WPM_SHORT_WEIGHT": "-0.1"},
+            "LIVE_WPM_SHORT_WEIGHT",
+            "-0.1",
         ),
     ],
 )
