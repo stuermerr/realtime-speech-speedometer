@@ -8,7 +8,10 @@ from app.core.config import (
     AzureSettings,
     ConfigurationError,
     DeepgramSettings,
+    LIVE_WPM_MINIMUM_ACTIVE_SECONDS,
+    LIVE_WPM_WINDOW_SECONDS,
     LiveWpmDebugSettings,
+    LiveWpmSettings,
     load_backend_environment,
 )
 
@@ -143,3 +146,57 @@ def test_live_wpm_debug_logging_requires_explicit_boolean_value() -> None:
         LiveWpmDebugSettings.from_environment({"LIVE_WPM_DEBUG": "provider-secret"})
 
     assert str(caught.value) == "LIVE_WPM_DEBUG must be true or false"
+
+
+def test_live_wpm_settings_use_centralized_defaults() -> None:
+    settings = LiveWpmSettings.from_environment({})
+
+    assert settings.window_seconds == LIVE_WPM_WINDOW_SECONDS
+    assert settings.minimum_active_seconds == LIVE_WPM_MINIMUM_ACTIVE_SECONDS
+
+
+@pytest.mark.parametrize(
+    ("environment", "variable", "raw_value"),
+    [
+        ({"LIVE_WPM_WINDOW_SECONDS": ""}, "LIVE_WPM_WINDOW_SECONDS", ""),
+        (
+            {"LIVE_WPM_WINDOW_SECONDS": "not-a-number"},
+            "LIVE_WPM_WINDOW_SECONDS",
+            "not-a-number",
+        ),
+        ({"LIVE_WPM_WINDOW_SECONDS": "nan"}, "LIVE_WPM_WINDOW_SECONDS", "nan"),
+        ({"LIVE_WPM_WINDOW_SECONDS": "0"}, "LIVE_WPM_WINDOW_SECONDS", "0"),
+        (
+            {"LIVE_WPM_MINIMUM_ACTIVE_SECONDS": ""},
+            "LIVE_WPM_MINIMUM_ACTIVE_SECONDS",
+            "",
+        ),
+        (
+            {"LIVE_WPM_MINIMUM_ACTIVE_SECONDS": "infinity"},
+            "LIVE_WPM_MINIMUM_ACTIVE_SECONDS",
+            "infinity",
+        ),
+        (
+            {"LIVE_WPM_MINIMUM_ACTIVE_SECONDS": "-1"},
+            "LIVE_WPM_MINIMUM_ACTIVE_SECONDS",
+            "-1",
+        ),
+        (
+            {
+                "LIVE_WPM_WINDOW_SECONDS": "3",
+                "LIVE_WPM_MINIMUM_ACTIVE_SECONDS": "4",
+            },
+            "LIVE_WPM_MINIMUM_ACTIVE_SECONDS",
+            "4",
+        ),
+    ],
+)
+def test_live_wpm_settings_reject_unsafe_overrides_without_echoing_values(
+    environment: dict[str, str], variable: str, raw_value: str
+) -> None:
+    with pytest.raises(ConfigurationError) as caught:
+        LiveWpmSettings.from_environment(environment)
+
+    assert variable in str(caught.value)
+    if raw_value:
+        assert raw_value not in str(caught.value)

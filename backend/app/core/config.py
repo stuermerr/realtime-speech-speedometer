@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -11,6 +12,8 @@ from dotenv import dotenv_values
 
 BACKEND_DIRECTORY = Path(__file__).resolve().parents[2]
 BACKEND_ENV_PATH = BACKEND_DIRECTORY / ".env"
+LIVE_WPM_WINDOW_SECONDS = 5.0
+LIVE_WPM_MINIMUM_ACTIVE_SECONDS = 1.0
 
 
 class ConfigurationError(RuntimeError):
@@ -70,6 +73,38 @@ class LiveWpmDebugSettings:
         if value not in {"true", "false"}:
             raise ConfigurationError("LIVE_WPM_DEBUG must be true or false")
         return cls(enabled=value == "true")
+
+
+@dataclass(frozen=True, slots=True)
+class LiveWpmSettings:
+    """Validated startup configuration for live active-speech pace."""
+
+    window_seconds: float = LIVE_WPM_WINDOW_SECONDS
+    minimum_active_seconds: float = LIVE_WPM_MINIMUM_ACTIVE_SECONDS
+
+    @classmethod
+    def from_environment(
+        cls, environment: Mapping[str, str] | None = None
+    ) -> LiveWpmSettings:
+        if environment is None:
+            environment = load_backend_environment()
+        window_seconds = _live_wpm_seconds(
+            environment, "LIVE_WPM_WINDOW_SECONDS", LIVE_WPM_WINDOW_SECONDS
+        )
+        minimum_active_seconds = _live_wpm_seconds(
+            environment,
+            "LIVE_WPM_MINIMUM_ACTIVE_SECONDS",
+            LIVE_WPM_MINIMUM_ACTIVE_SECONDS,
+        )
+        if minimum_active_seconds > window_seconds:
+            raise ConfigurationError(
+                "LIVE_WPM_MINIMUM_ACTIVE_SECONDS must not exceed "
+                "LIVE_WPM_WINDOW_SECONDS"
+            )
+        return cls(
+            window_seconds=window_seconds,
+            minimum_active_seconds=minimum_active_seconds,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,3 +171,19 @@ def _normalize_endpoint(endpoint: str) -> str:
             "or a fragment"
         )
     return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+
+def _live_wpm_seconds(
+    environment: Mapping[str, str], variable_name: str, default: float
+) -> float:
+    if variable_name not in environment:
+        return default
+    try:
+        value = float(environment[variable_name].strip())
+    except ValueError:
+        raise ConfigurationError(
+            f"{variable_name} must be a finite positive number"
+        ) from None
+    if not math.isfinite(value) or value <= 0:
+        raise ConfigurationError(f"{variable_name} must be a finite positive number")
+    return value
