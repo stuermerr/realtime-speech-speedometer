@@ -140,6 +140,21 @@ describe("browser session adapter", () => {
     expect(browser.socket.closeCount).toBe(1);
   });
 
+  it("enters finalizing when inactivity requests Stop", async () => {
+    const browser = runtime();
+    const events: SessionAction[] = [];
+    await new BrowserSession(events.push.bind(events), browser.value).start();
+
+    browser.socket.dispatchEvent(new MessageEvent("message", {
+      data: JSON.stringify({ type: "stop_requested", reason: "inactivity" }),
+    }));
+    await settle();
+
+    expect(events).toEqual([{ type: "listening" }, { type: "stop" }]);
+    expect(browser.recorder.state).toBe("inactive");
+    expect(browser.socket.sent.at(-1)).toBe(JSON.stringify({ type: "stop" }));
+  });
+
   it("fails a connection that does not open within ten seconds", async () => {
     vi.useFakeTimers();
     const browser = runtime({ autoOpen: false });
