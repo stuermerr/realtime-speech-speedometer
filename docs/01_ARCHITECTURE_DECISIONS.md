@@ -289,8 +289,8 @@ The live WPM represents recent **active speaking pace**, not the average over th
 
 ### Product default
 
-- rolling window of **6 seconds of active speech**;
-- **3 seconds of active speech** before live WPM is available;
+- rolling window of **4 seconds of active speech**;
+- **2 seconds of active speech** before live WPM is available;
 - pauses are not counted as speaking time;
 - exact pause threshold/window-edge handling remains configurable until live testing.
 
@@ -336,13 +336,13 @@ and slower resumed speech. Each run produced live measurements and a normal
 provider-drained summary without browser-console errors.
 
 The 10/4 baseline was stable but first feedback required four active seconds,
-outside the approximately three-second responsiveness target. The 6/3 profile
-was the longest profile that met that target for first feedback and pace
-changes, including after the deliberate pause. The 4/2 and 2/1 profiles also
-responded but offered no observed benefit that justified their greater
-reactivity. Therefore 6/3 is the promoted default. The existing pause policy
-continued to respond after resumed speech without explicit context-break logic,
-so no pause-context feature is needed.
+outside the approximately three-second responsiveness target. The 4/2 and 2/1
+profiles felt more responsive when changing between faster and slower speech;
+4/2 is preferred because it is less reactive than 2/1. Its higher volatility
+than 6/3 is accepted as the better trade-off for the live-feedback goal.
+Therefore 4/2 is the promoted default. The existing pause policy continued to
+respond after resumed speech without explicit context-break logic, so no
+pause-context feature is needed.
 
 ### Interview explanation
 
@@ -991,8 +991,10 @@ The global summary contains four unrounded quantitative values:
 - `active_speaking_seconds`;
 - `presentation_duration_seconds`.
 
-Active speech uses the same policy as live WPM: word intervals and gaps below
-one second count; gaps of one second or more do not. Presentation duration is
+Active speech uses the same interval and gap semantics as live WPM: word
+intervals and gaps below one second count; gaps of one second or more do not.
+Its availability minimum remains fixed at four active-speech seconds,
+independently of the configurable live WPM minimum. Presentation duration is
 the first finalized word start through the last finalized word end. It is not
 wall-clock session time and the summary pace is never an average of rolling
 live measurements. An empty finalized timeline produces a valid empty summary.

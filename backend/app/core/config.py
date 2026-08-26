@@ -12,8 +12,8 @@ from dotenv import dotenv_values
 
 BACKEND_DIRECTORY = Path(__file__).resolve().parents[2]
 BACKEND_ENV_PATH = BACKEND_DIRECTORY / ".env"
-LIVE_WPM_WINDOW_SECONDS = 6.0
-LIVE_WPM_MINIMUM_ACTIVE_SECONDS = 3.0
+LIVE_WPM_WINDOW_SECONDS = 4.0
+LIVE_WPM_MINIMUM_ACTIVE_SECONDS = 2.0
 
 
 class ConfigurationError(RuntimeError):
