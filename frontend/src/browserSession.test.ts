@@ -13,7 +13,7 @@ class FakeRecorder extends EventTarget implements RecorderPort {
   state: RecordingState = "inactive";
 
   start(timeslice?: number): void {
-    expect(timeslice).toBe(250);
+    expect(timeslice).toBe(100);
     this.state = "recording";
   }
 

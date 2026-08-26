@@ -820,7 +820,7 @@ query omits `encoding`, `sample_rate`, and `channels`, allowing the provider to
 read framing from the WebM container. The historical fixed-sample spike keeps
 its explicit raw `linear16`, 24 kHz, mono mode unchanged.
 
-`MediaRecorder.start(250)` requests approximately 250 ms chunks. This value is
+`MediaRecorder.start(100)` requests approximately 100 ms chunks. This value is
 a transport cadence, not a speech clock; WPM continues to use provider word
 timestamps.
 
@@ -832,6 +832,11 @@ timestamps.
   command.
 - Current Chrome/Chromium exposes WebM/Opus through `MediaRecorder`; support is
   checked before microphone access.
+- A real microphone comparison of the same Dual 2s/8s, 30/70 profile found
+  100 ms visibly more responsive than 250 ms. The secret-safe diagnostic run
+  forwarded 832 audio chunks and received 141 Deepgram `Results`, producing
+  113 timeline-changing measurements in approximately 100 seconds, without
+  browser-console errors.
 
 See:
 
