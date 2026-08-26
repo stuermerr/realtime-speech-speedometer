@@ -8,6 +8,7 @@ from typing import Any, TypeVar
 import pytest
 
 from app.services.browser_session import BrowserLiveWpmSession, LiveWpmDiagnostics
+from app.services.wpm import ActiveSpeechPolicy, ActiveSpeechWpm
 
 
 Result = TypeVar("Result")
@@ -204,6 +205,29 @@ def test_unavailable_measurement_is_null_and_unchanged_result_is_suppressed() ->
         },
         {"type": "stopped", "reason": "user"},
     ]
+
+
+def test_live_minimum_is_independent_from_fixed_summary_minimum() -> None:
+    browser = FakeBrowser([{"type": "websocket.receive", "text": '{"type":"stop"}'}])
+    provider = FakeProvider(
+        [provider_result(3, duration=1.5, is_final=True), {"type": "Metadata"}]
+    )
+    calculator = ActiveSpeechWpm(
+        window_seconds=2.0,
+        policy=ActiveSpeechPolicy(minimum_active_seconds=1.0),
+    )
+
+    run(
+        BrowserLiveWpmSession(
+            browser,
+            provider,
+            live_wpm_calculator=calculator,
+            drain_timeout_seconds=0.5,
+        ).run()
+    )
+
+    assert browser.sent[0]["wpm"] == 120.0
+    assert browser.sent[1]["average_speaking_pace"] is None
 
 
 def test_inactivity_requests_browser_stop_then_emits_empty_completion() -> None:
@@ -454,6 +478,11 @@ def test_live_wpm_diagnostics_cover_normal_pipeline_without_sensitive_content() 
     )
 
     records = [json.loads(line) for line in output]
+    started = next(
+        record
+        for record in records
+        if record["stage"] == "session" and record["event"] == "started"
+    )
     events = {(record["stage"], record["event"]) for record in records}
     assert {
         ("browser", "audio_received"),
@@ -503,6 +532,32 @@ def test_live_wpm_diagnostics_cover_normal_pipeline_without_sensitive_content() 
         record["changed"] for record in records if record["event"] == "timeline_changed"
     } == {False, True}
     assert all(canary not in "\n".join(output) for canary in canaries)
+    assert "live_window_seconds" not in started
+    assert "live_minimum_active_seconds" not in started
+
+
+def test_live_wpm_diagnostics_include_effective_tuning_when_enabled() -> None:
+    browser = FakeBrowser([{"type": "websocket.receive", "text": '{"type":"stop"}'}])
+    provider = FakeProvider([{"type": "Metadata", "request_id": "safe"}])
+    output: list[str] = []
+
+    run(
+        BrowserLiveWpmSession(
+            browser,
+            provider,
+            diagnostics=LiveWpmDiagnostics(
+                enabled=True,
+                sink=output.append,
+                live_window_seconds=6.0,
+                live_minimum_active_seconds=3.0,
+            ),
+            drain_timeout_seconds=0.5,
+        ).run()
+    )
+
+    started = json.loads(output[0])
+    assert started["live_window_seconds"] == 6.0
+    assert started["live_minimum_active_seconds"] == 3.0
 
 
 def test_live_wpm_diagnostics_categorize_abnormal_provider_close_safely() -> None:

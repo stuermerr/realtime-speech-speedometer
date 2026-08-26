@@ -25,6 +25,7 @@ from app.services.session_summary import (
 )
 from app.services.wpm import (
     ActiveSpeechPolicy,
+    ActiveSpeechWpm,
     PaceStatus,
     WpmMeasurement,
     classify_pace,
@@ -45,6 +46,8 @@ class LiveWpmDiagnostics:
         sink: Callable[[str], object] | None = None,
         clock: Callable[[], float] = time.monotonic,
         session_id: str | None = None,
+        live_window_seconds: float | None = None,
+        live_minimum_active_seconds: float | None = None,
     ) -> None:
         self._enabled = enabled
         if enabled and sink is None:
@@ -53,6 +56,8 @@ class LiveWpmDiagnostics:
         self._clock = clock
         self._started_at = clock()
         self._session_id = uuid.uuid4().hex if session_id is None else session_id
+        self._live_window_seconds = live_window_seconds
+        self._live_minimum_active_seconds = live_minimum_active_seconds
 
     def record(
         self,
@@ -70,6 +75,14 @@ class LiveWpmDiagnostics:
             **fields,
         }
         self._sink(json.dumps(record, separators=(",", ":"), sort_keys=True))
+
+    def startup_fields(self) -> dict[str, DiagnosticValue]:
+        fields: dict[str, DiagnosticValue] = {}
+        if self._live_window_seconds is not None:
+            fields["live_window_seconds"] = self._live_window_seconds
+        if self._live_minimum_active_seconds is not None:
+            fields["live_minimum_active_seconds"] = self._live_minimum_active_seconds
+        return fields
 
 
 class BrowserSessionProtocolError(RuntimeError):
@@ -186,6 +199,8 @@ class BrowserLiveWpmSession:
         browser: BrowserWebSocket,
         provider: BrowserDeepgramSession,
         *,
+        live_wpm_calculator: ActiveSpeechWpm | None = None,
+        summary_policy: ActiveSpeechPolicy | None = None,
         diagnostics: LiveWpmDiagnostics | None = None,
         drain_timeout_seconds: float = 5.0,
         inactivity_timeout_seconds: float = 300.0,
@@ -202,9 +217,8 @@ class BrowserLiveWpmSession:
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
         self._stop_ack_timeout_seconds = stop_ack_timeout_seconds
         self._clock = clock
-        policy = ActiveSpeechPolicy()
-        self._pipeline = LiveWpmPipeline(policy=policy)
-        self._summary_calculator = SessionSummaryCalculator(policy=policy)
+        self._pipeline = LiveWpmPipeline(calculator=live_wpm_calculator)
+        self._summary_calculator = SessionSummaryCalculator(policy=summary_policy)
         self._last_recognized_progress_at = clock()
         self._maximum_recognized_end: float | None = None
         self._diagnostics = (
@@ -215,7 +229,9 @@ class BrowserLiveWpmSession:
         browser_task: asyncio.Task[None] | None = None
         provider_task: asyncio.Task[bool] | None = None
         inactivity_task: asyncio.Task[None] | None = None
-        self._diagnostics.record("session", "started")
+        self._diagnostics.record(
+            "session", "started", **self._diagnostics.startup_fields()
+        )
         try:
             self._diagnostics.record("provider", "opening")
             async with self._provider:
@@ -408,9 +424,8 @@ class BrowserLiveWpmSession:
 
     async def _wait_for_inactivity(self) -> None:
         while True:
-            remaining = (
-                self._inactivity_timeout_seconds
-                - (self._clock() - self._last_recognized_progress_at)
+            remaining = self._inactivity_timeout_seconds - (
+                self._clock() - self._last_recognized_progress_at
             )
             if remaining <= 0:
                 return

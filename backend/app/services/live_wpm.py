@@ -63,13 +63,20 @@ class SessionWordState:
 class LiveWpmPipeline:
     """Reconcile one session's Results and calculate changed timelines."""
 
-    def __init__(self, *, policy: ActiveSpeechPolicy | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        calculator: ActiveSpeechWpm | None = None,
+        policy: ActiveSpeechPolicy | None = None,
+    ) -> None:
+        if calculator is not None and policy is not None:
+            raise ValueError("Use either a WPM calculator or active-speech policy")
         self._word_state = SessionWordState()
-        self._calculator = ActiveSpeechWpm(policy=policy)
+        self._calculator = (
+            ActiveSpeechWpm(policy=policy) if calculator is None else calculator
+        )
 
-    def process_result(
-        self, result: ParsedDeepgramResult
-    ) -> WpmMeasurement | None:
+    def process_result(self, result: ParsedDeepgramResult) -> WpmMeasurement | None:
         """Return a measurement only when the visible timeline changes."""
         if not self._word_state.apply_result(result):
             return None
@@ -84,9 +91,7 @@ class LiveWpmPipeline:
     def finalized_chunks(self) -> tuple[FinalizedChunk, ...]:
         return self._word_state.finalized_chunks
 
-    def process_event(
-        self, payload: Mapping[str, object]
-    ) -> WpmMeasurement | None:
+    def process_event(self, payload: Mapping[str, object]) -> WpmMeasurement | None:
         """Parse and process one provider event; ignore known non-Results."""
         result = parse_deepgram_event(payload)
         if result is None:

@@ -287,9 +287,10 @@ A yellow transition band may be added only if UX testing suggests it improves re
 
 The live WPM represents recent **active speaking pace**, not the average over the entire session.
 
-### Initial concept
+### Product default
 
-- rolling window of approximately **10 seconds of active speech**;
+- rolling window of **6 seconds of active speech**;
+- **3 seconds of active speech** before live WPM is available;
 - pauses are not counted as speaking time;
 - exact pause threshold/window-edge handling remains configurable until live testing.
 
@@ -317,7 +318,31 @@ A short window reacts quickly but can be noisy.
 
 A long window is stable but reacts slowly.
 
-Approximately ten active-speech seconds is the initial compromise, not a permanent constant.
+The active-speech window is a product default rather than a permanent constant.
+
+The shared calculation still uses complete word intervals and the one-second
+pause threshold. Its live window and live availability minimum are separate,
+restart-only server configuration values so microphone testing can tune the
+responsiveness/stability trade-off without changing provider-independent WPM
+semantics. The completed-summary availability minimum remains independently
+fixed at four active-speech seconds, even when the live minimum is tuned.
+
+### Evidence — issue #24 microphone comparison (2026-08-26)
+
+Tested the baseline **10/4**, balanced **6/3**, responsive **4/2**, and very
+responsive **2/1** profiles with steady speech, slow-to-fast and fast-to-slow
+changes, a short hesitation, an approximately three-second pause, and faster
+and slower resumed speech. Each run produced live measurements and a normal
+provider-drained summary without browser-console errors.
+
+The 10/4 baseline was stable but first feedback required four active seconds,
+outside the approximately three-second responsiveness target. The 6/3 profile
+was the longest profile that met that target for first feedback and pace
+changes, including after the deliberate pause. The 4/2 and 2/1 profiles also
+responded but offered no observed benefit that justified their greater
+reactivity. Therefore 6/3 is the promoted default. The existing pause policy
+continued to respond after resumed speech without explicit context-break logic,
+so no pause-context feature is needed.
 
 ### Interview explanation
 

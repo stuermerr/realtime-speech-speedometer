@@ -11,6 +11,7 @@ from app.core.config import (
     ConfigurationError,
     DeepgramSettings,
     LiveWpmDebugSettings,
+    LiveWpmSettings,
 )
 from app.services.browser_session import (
     BrowserDeepgramSession,
@@ -21,6 +22,7 @@ from app.services.deepgram_transcription import (
     DeepgramAudioMode,
     DeepgramTranscriptionSession,
 )
+from app.services.wpm import ActiveSpeechPolicy, ActiveSpeechWpm
 
 
 FRONTEND_DIRECTORY = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -41,6 +43,14 @@ def create_app(
 ) -> FastAPI:
     application = FastAPI(title="Speech Speedometer")
     make_provider = _browser_provider if provider_factory is None else provider_factory
+    live_wpm_settings = LiveWpmSettings.from_environment()
+    live_wpm_calculator = ActiveSpeechWpm(
+        window_seconds=live_wpm_settings.window_seconds,
+        policy=ActiveSpeechPolicy(
+            minimum_active_seconds=live_wpm_settings.minimum_active_seconds
+        ),
+    )
+    summary_policy = ActiveSpeechPolicy()
     debug_logging_enabled = LiveWpmDebugSettings.from_environment().enabled
     assets_directory = frontend_directory / "assets"
     if assets_directory.is_dir():
@@ -77,7 +87,15 @@ def create_app(
             await BrowserLiveWpmSession(
                 websocket,
                 provider,
-                diagnostics=LiveWpmDiagnostics(enabled=debug_logging_enabled),
+                live_wpm_calculator=live_wpm_calculator,
+                summary_policy=summary_policy,
+                diagnostics=LiveWpmDiagnostics(
+                    enabled=debug_logging_enabled,
+                    live_window_seconds=live_wpm_settings.window_seconds,
+                    live_minimum_active_seconds=(
+                        live_wpm_settings.minimum_active_seconds
+                    ),
+                ),
             ).run()
         try:
             await websocket.close()

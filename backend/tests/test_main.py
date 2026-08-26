@@ -102,16 +102,16 @@ def test_live_websocket_owns_a_fresh_provider_for_each_session() -> None:
                 "type": "summary",
                 "average_speaking_pace": None,
                 "finalized_words": 1,
-                    "active_speaking_seconds": 0.5,
-                    "presentation_duration_seconds": 0.5,
-                    "segments": [
-                        {
-                            "text": "fresh",
-                            "average_speaking_pace": None,
-                            "pace_status": None,
-                        }
-                    ],
-                }
+                "active_speaking_seconds": 0.5,
+                "presentation_duration_seconds": 0.5,
+                "segments": [
+                    {
+                        "text": "fresh",
+                        "average_speaking_pace": None,
+                        "pace_status": None,
+                    }
+                ],
+            }
             assert websocket.receive_json() == {"type": "stopped", "reason": "user"}
 
     assert len(providers) == 2
@@ -143,6 +143,42 @@ def test_live_wpm_debug_environment_enables_session_records(
     assert ("session", "started") in {
         (record["stage"], record["event"]) for record in records
     }
+
+
+def test_live_wpm_environment_configures_live_without_changing_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LIVE_WPM_WINDOW_SECONDS", "2")
+    monkeypatch.setenv("LIVE_WPM_MINIMUM_ACTIVE_SECONDS", "1")
+    provider = EndpointProvider(
+        [
+            {
+                "type": "Results",
+                "is_final": True,
+                "channel": {
+                    "alternatives": [
+                        {
+                            "transcript": "one two three",
+                            "words": [
+                                {"word": "one", "start": 0.0, "end": 0.5},
+                                {"word": "two", "start": 0.5, "end": 1.0},
+                                {"word": "three", "start": 1.0, "end": 1.5},
+                            ],
+                        }
+                    ]
+                },
+            }
+        ]
+    )
+    client = TestClient(create_app(provider_factory=lambda: provider))
+
+    with client.websocket_connect("/ws/live") as websocket:
+        websocket.send_json({"type": "stop"})
+        measurement = websocket.receive_json()
+        summary = websocket.receive_json()
+
+    assert measurement["wpm"] == 120.0
+    assert summary["average_speaking_pace"] is None
 
 
 def test_missing_server_configuration_is_reported_without_details() -> None:
