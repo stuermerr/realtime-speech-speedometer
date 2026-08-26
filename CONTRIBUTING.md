@@ -28,4 +28,5 @@ Run the backend checks from the repository root:
 ```bash
 uv run --directory backend --locked pytest
 uv run --directory backend --locked mypy app tests spikes
+uv run --directory backend --locked ruff check app tests spikes
 ```

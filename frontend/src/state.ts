@@ -80,6 +80,7 @@ export function reduceSession(
     case "stop":
       return { ...state, lifecycle: "finalizing" };
     case "summary":
+      // Completion is revealed only after the ordered stopped event confirms finalization.
       return { ...state, pendingSummary: action.summary };
     case "stopped":
       if (state.pendingSummary === null) return protocolError(state);
