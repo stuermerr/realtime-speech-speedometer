@@ -33,6 +33,8 @@ export function App({ createSession = defaultSessionFactory }: AppProps) {
   useEffect(() => () => session.current?.cleanup(), []);
 
   const start = (): void => {
+    // Each presentation gets a fresh transport/session object and fresh reducer
+    // state, matching the backend's one-WebSocket-per-presentation lifetime.
     session.current?.cleanup();
     dispatch({ type: "start" });
     const nextSession = createSession(dispatch);

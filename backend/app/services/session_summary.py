@@ -53,6 +53,7 @@ class SessionSummaryCalculator:
 
     def build(self, finalized_chunks: Iterable[FinalizedChunk]) -> SessionSummary:
         """Calculate global metrics and segments from immutable final chunks."""
+        # Materializing once gives every summary metric the same finalized snapshot.
         chunks = tuple(finalized_chunks)
         words = _flatten_words(chunks)
         if not words:
@@ -76,6 +77,8 @@ class SessionSummaryCalculator:
         pending: list[FinalizedChunk] = []
         for chunk in chunks:
             pending.append(chunk)
+            # Keep provider-final chunks whole while accumulating enough active
+            # speech for each segment's WPM to be meaningful.
             if (
                 self._active_seconds(pending)
                 >= self._policy.minimum_active_seconds

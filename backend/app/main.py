@@ -47,6 +47,9 @@ def create_app(
 ) -> FastAPI:
     application = FastAPI(title="Speech Speedometer")
     make_provider = _browser_provider if provider_factory is None else provider_factory
+
+    # Build the deterministic pace policy once at startup. A live WebSocket session
+    # owns only changing word state; all sessions share these immutable settings.
     live_wpm_settings = LiveWpmSettings.from_environment()
     live_policy = ActiveSpeechPolicy(
         minimum_active_seconds=live_wpm_settings.minimum_active_seconds
@@ -92,6 +95,8 @@ def create_app(
     async def live_wpm(websocket: WebSocket) -> None:
         await websocket.accept()
         try:
+            # This is the composition boundary for one presentation: one browser
+            # WebSocket is paired with one server-side Deepgram connection.
             provider = make_provider()
         except ConfigurationError:
             await websocket.send_json(

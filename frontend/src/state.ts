@@ -98,6 +98,8 @@ export function reduceSession(
         return protocolError(state);
       }
       if (action.wpm === null || action.paceStatus === null) {
+        // Insufficient new evidence and pauses do not blank the speedometer; the
+        // last valid pace stays visible until a trustworthy replacement arrives.
         return state;
       }
       return {

@@ -45,6 +45,9 @@ class SessionWordState:
     def apply_result(self, result: ParsedDeepgramResult) -> bool:
         """Apply one atomic hypothesis and report a visible timeline change."""
         previous_words = self.words
+
+        # Deepgram interims are full replacement hypotheses, not deltas. Finals
+        # move into immutable history and clear that replaceable interim tail.
         if result.is_final:
             candidate_finalized = self._finalized_words + result.words
             candidate_interim: tuple[RecognizedWord, ...] = ()
@@ -81,6 +84,9 @@ class LiveWpmPipeline:
         """Return a measurement only when the visible timeline changes."""
         if not self._word_state.apply_result(result):
             return None
+
+        # Recalculate from the complete corrected timeline, making the same input
+        # deterministic even when Deepgram revises an interim transcript.
         return self._calculator.calculate(self._word_state.words)
 
     @property

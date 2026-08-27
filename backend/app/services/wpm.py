@@ -58,6 +58,8 @@ class ActiveSpeechPolicy:
     def calculate_pace(
         self, word_count: int, active_speech_seconds: float
     ) -> float | None:
+        # None means "not enough evidence yet"; it is intentionally distinct from
+        # zero pace so the UI can keep showing the last trustworthy live value.
         if active_speech_seconds < self.minimum_active_seconds:
             return None
         return word_count * 60 / active_speech_seconds
@@ -98,6 +100,8 @@ class ActiveSpeechWpm:
     def _select_suffix(
         self, words: tuple[RecognizedWord, ...]
     ) -> tuple[RecognizedWord, ...]:
+        # Walk backward by whole recognized words until the recent active-speech
+        # window is full. Network arrival time never participates in this choice.
         start_index = len(words)
         while start_index > 0:
             start_index -= 1
@@ -170,6 +174,8 @@ class DualWindowActiveSpeechWpm:
         long_measurement = self._long.calculate(timeline)
         if short_measurement.wpm is None or long_measurement.wpm is None:
             return long_measurement
+        # The short window supplies responsiveness; the long window damps the
+        # volatility seen in real microphone trials.
         blended_wpm = (
             self._short_weight * short_measurement.wpm
             + (1.0 - self._short_weight) * long_measurement.wpm
@@ -222,6 +228,7 @@ def _active_speech_duration(
     interval_end = words[0].end_seconds
     active_speech_seconds += interval_end - words[0].start_seconds
     for word in words[1:]:
+        # Union overlapping word intervals so one instant of audio is counted once.
         if word.start_seconds <= interval_end:
             if word.end_seconds > interval_end:
                 active_speech_seconds += word.end_seconds - interval_end
@@ -229,6 +236,8 @@ def _active_speech_duration(
             continue
 
         gap = word.start_seconds - interval_end
+        # Brief within-phrase gaps are speech rhythm; long pauses are excluded so
+        # silence cannot make the speaker appear artificially slow.
         if gap < pause_threshold_seconds:
             active_speech_seconds += gap
         active_speech_seconds += word.end_seconds - word.start_seconds

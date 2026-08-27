@@ -292,6 +292,9 @@ def parse_deepgram_event(
     payload: Mapping[str, object],
 ) -> ParsedDeepgramResult | None:
     """Normalize one Results event; ignore additive non-Results events."""
+
+    # Provider-specific validation ends here. Downstream WPM code receives only
+    # normalized words on the audio timeline, never raw Deepgram dictionaries.
     envelope = _validate_payload(
         _DeepgramEventEnvelope,
         payload,

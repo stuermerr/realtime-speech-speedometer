@@ -53,6 +53,8 @@ export class BrowserSession {
   ) {}
 
   async start(): Promise<void> {
+    // Fail before requesting permission when the browser cannot support the full
+    // microphone -> MediaRecorder -> WebSocket path.
     const unsupportedReason = this.runtime.capabilities();
     if (unsupportedReason !== null) {
       this.dispatch({ type: "unsupported", message: unsupportedReason });
@@ -77,6 +79,9 @@ export class BrowserSession {
       this.recorder.addEventListener("dataavailable", this.handleAudio);
       this.recorder.addEventListener("error", this.handleRecorderError);
       this.recorder.addEventListener("stop", this.handleRecorderStop);
+
+      // Small WebM/Opus chunks keep feedback live while leaving transcription
+      // credentials and provider-specific behavior in the backend.
       this.recorder.start(CHUNK_MILLISECONDS);
       this.dispatch({ type: "listening" });
     } catch (error) {
@@ -141,6 +146,8 @@ export class BrowserSession {
     if (this.cleaned) return;
     const blob = (event as MessageEvent<Blob>).data;
     if (!(blob instanceof Blob) || blob.size === 0) return;
+    // Blob conversion is asynchronous, so serialize sends to preserve the audio
+    // order produced by MediaRecorder.
     this.sendChain = this.sendChain
       .then(async () => {
         if (this.cleaned) return;
@@ -172,6 +179,8 @@ export class BrowserSession {
 
   private readonly handleMessage = (event: Event): void => {
     try {
+      // Backend messages become reducer actions here; React never needs to know
+      // anything about Deepgram or the wire-format field names.
       const message = parseBackendMessage((event as MessageEvent<unknown>).data);
       if (message.type === "measurement") {
         this.dispatch({

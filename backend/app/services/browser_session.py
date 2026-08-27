@@ -237,6 +237,9 @@ class BrowserLiveWpmSession:
             self._diagnostics.record("provider", "opening")
             async with self._provider:
                 self._diagnostics.record("provider", "opened")
+
+                # These flows run concurrently so browser audio can move upstream
+                # while provider transcripts and inactivity checks move downstream.
                 browser_task = asyncio.create_task(self._forward_browser())
                 provider_task = asyncio.create_task(self._forward_provider())
                 inactivity_task = asyncio.create_task(self._wait_for_inactivity())
@@ -251,6 +254,8 @@ class BrowserLiveWpmSession:
                     except BaseException:
                         await _cancel(provider_task)
                         raise
+                    # Stop closes Deepgram's input but not its output. Drain the
+                    # remaining final Results before calculating the summary.
                     metadata_seen = await self._drain_provider(provider_task)
                     if not metadata_seen:
                         raise BrowserSessionProtocolError(
@@ -339,6 +344,8 @@ class BrowserLiveWpmSession:
                     chunk_index=chunk_index,
                     byte_size=len(audio),
                 )
+                # Deliberately no internal queue: WebSocket backpressure bounds
+                # memory if Deepgram is temporarily slower than the browser.
                 await self._provider.send_audio(audio)
                 self._diagnostics.record(
                     "provider",
@@ -403,6 +410,9 @@ class BrowserLiveWpmSession:
                         reason="unchanged_timeline",
                     )
                     continue
+
+                # WPM is emitted only for a changed word timeline. During pauses no
+                # event is sent, so the browser naturally retains its last value.
                 self._diagnostics.record(
                     "pipeline",
                     "wpm_availability",
@@ -441,6 +451,8 @@ class BrowserLiveWpmSession:
             self._last_recognized_progress_at = self._clock()
 
     async def _send_completion(self, reason: Literal["user", "inactivity"]) -> None:
+        # Only provider-final chunks enter the recap; interim hypotheses may still
+        # be corrected and therefore must never become summary evidence.
         summary = self._summary_calculator.build(self._pipeline.finalized_chunks)
         await self._send(_SummaryMessage.from_summary(summary))
         await self._send(_StoppedMessage(reason=reason))
