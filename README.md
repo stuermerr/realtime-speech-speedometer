@@ -1,196 +1,180 @@
 # Speech Speedometer
 
-Speech Speedometer is a rhetoric-training web application that gives live
-feedback about speaking pace. A React/TypeScript presentation UI streams
-browser microphone audio through FastAPI to Deepgram and renders the backend's
-deterministic live WPM and red/green pace classification.
+Speech Speedometer is a rhetoric-training web application that gives speakers
+live feedback on their speaking pace. It streams microphone audio from a React
+client through a FastAPI backend to Deepgram, then calculates words per minute
+(WPM) from the returned word timestamps.
 
-The canonical live pace default is a Dual Window: 2 seconds at 20% blended
-with 10 seconds at 80%, available after 1 active-speaking second. Single Window
-is retained as a server-side fallback and tuning seam.
+## Why use it?
 
-## Repository layout
+- See a responsive live WPM reading while speaking.
+- Get simple pace feedback: **on pace** at 115–150 WPM and **too slow** or
+  **too fast** outside that range.
+- Keep the last meaningful reading visible during pauses.
+- Review a completed-session summary with average pace, finalized word count,
+  active speaking time, presentation duration, transcript, and pace segments.
+- Keep speech-provider credentials on the server rather than in the browser.
+- Rely on deterministic, testable pace calculations instead of an LLM.
+
+The application stores session state in memory only. It has no accounts,
+database, or presentation history.
+
+## How it works
 
 ```text
-.
-├── backend/          Python/FastAPI realtime service
-│   ├── app/
-│   ├── spikes/
-│   ├── tests/
-│   ├── .env.example
-│   ├── .python-version
-│   ├── pyproject.toml
-│   └── uv.lock
-├── frontend/         React/TypeScript Vite product UI
-├── docs/             architecture decisions and empirical evidence
-└── samples/          shared audio samples
+Browser microphone
+        │ WebM/Opus audio over WebSocket
+        ▼
+FastAPI backend ───────────► Deepgram Nova-3
+        ▲                      │
+        │ live WPM + summary   │ transcript and word timestamps
+        └──────────────────────┘
 ```
 
-The repository root is not a Python or Node project. The backend and frontend
-own independent dependencies, lockfiles, and toolchains.
+The browser records approximately 100 ms audio chunks. FastAPI relays those
+chunks to Deepgram without transcoding. The backend uses Deepgram's audio
+timeline—not network arrival time—to calculate recent active-speaking pace.
+The default calculation blends a 2-second window (20%) with a 10-second window
+(80%) and becomes available after one second of active speech.
 
-## Backend setup
+For the rationale and provider evidence, see
+[the architecture decision log](docs/01_ARCHITECTURE_DECISIONS.md) and the
+[Deepgram Nova-3 findings](docs/06_DEEPGRAM_NOVA_3_FINDINGS.md).
 
-Create or reconcile the backend environment from `backend/`:
+## Prerequisites
+
+- Python 3.13 or newer
+- [uv](https://docs.astral.sh/uv/)
+- Node.js and npm
+- A Deepgram API key
+- A current desktop browser with microphone access and
+  `audio/webm;codecs=opus` recording support (Chrome or Chromium is the tested
+  local path)
+
+An internet connection is required while using live transcription. Your
+Deepgram account may incur usage charges.
+
+## Get started
+
+Clone the repository and install the independent backend and frontend
+dependencies:
 
 ```bash
-cd backend
-cp .env.example .env
-uv sync --locked
+git clone https://github.com/stuermerr/realtime-speech-speedometer.git
+cd realtime-speech-speedometer
+
+cp backend/.env.example backend/.env
+uv sync --directory backend --locked
+npm --prefix frontend ci
 ```
 
-Fill `backend/.env` with local credentials. Process environment variables take
-precedence over values in that file. Both `.env` and `.venv` are disposable,
-ignored local state; never move a virtual environment between directories.
-Recreate it with `uv sync` if its location or Python interpreter is wrong.
+Open `backend/.env` and replace the placeholder value:
 
-## Backend commands
-
-Commands can be run from either working directory.
-
-| Task | From `backend/` | From repository root |
-| --- | --- | --- |
-| Sync | `uv sync --locked` | `uv sync --directory backend --locked` |
-| Add dependency | `uv add <package>` | `uv add --directory backend <package>` |
-| Run server | `uv run uvicorn app.main:app --reload` | `uv run --directory backend uvicorn app.main:app --reload` |
-| Run tests | `uv run --locked pytest` | `uv run --directory backend --locked pytest` |
-| Type-check | `uv run --locked mypy app tests spikes` | `uv run --directory backend --locked mypy app tests spikes` |
-| Azure spike | `uv run python -m spikes.run_realtime_transcription` | `uv run --directory backend python -m spikes.run_realtime_transcription` |
-| Deepgram spike | `uv run python -m spikes.run_deepgram_transcription` | `uv run --directory backend python -m spikes.run_deepgram_transcription` |
-
-## Frontend setup
-
-Install and run the frontend development server from `frontend/`:
-
-```bash
-cd frontend
-npm install
-npm run dev
+```dotenv
+DEEPGRAM_API_KEY=your-deepgram-api-key
 ```
 
-Vite serves http://localhost:5173 and proxies `/ws/live` to FastAPI on port
-8000. Use `npm test`, `npm run typecheck`, and `npm run build` for frontend
-verification.
+The `.env` file is ignored by Git. Process environment variables override
+values loaded from it.
 
-## Local product flow
+### Run in development
 
-Set `DEEPGRAM_API_KEY` in `backend/.env`. For development, run FastAPI and Vite
-separately and open http://localhost:5173/. For a production-style local run,
-build the frontend first and let FastAPI serve `frontend/dist`:
+Start the backend in one terminal:
 
 ```bash
-npm --prefix frontend run build
 uv run --directory backend uvicorn app.main:app --reload
 ```
 
-Open http://localhost:8000/ in current desktop Chrome or Chromium. Localhost is
-treated as a secure context for microphone access. Press Start, grant microphone
-permission, speak, then press Stop. The product keeps the most recent valid
-pace visible through pauses and waits for provider finalization before showing
-completion. Completion replaces the dominant live reading with a scrollable
-summary containing Average WPM, finalized words, active speech, presentation
-duration, and the complete chronological transcript grouped into deterministic
-pace segments. Each segment shows rounded WPM, an On pace/Too slow/Too fast
-label, and a compact marker on the same fixed pace scale, with transcript text
-in the left column and pace analysis in the right column on desktop. Empty presentations
-say `No speech was detected`; presentations below four seconds of active speech
-show their word/time metrics but leave Average WPM unavailable. The browser
-reveals this summary only after Deepgram has drained and the backend has sent
-ordered `summary` then `stopped` events. After five minutes without recognized
-speech progress it requests the same graceful finalization and explains the
-inactivity ending. The browser records
-`audio/webm;codecs=opus`; unsupported browsers fail before requesting the
-microphone. A clean stopped state is shown only after Deepgram drains the final
-audio, emits Metadata, and closes normally.
+Start the Vite development server in another:
 
-The browser never receives the Deepgram credential. See the
-[transport acceptance procedure](docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md) for
-the reproducible real-browser check.
-
-Use `--directory backend` for root-level commands. `--project backend` selects
-the backend environment but does not change the command's working directory,
-so the flat `app` and `spikes` imports will not resolve reliably.
-
-## Complete realtime data flow
-
-```text
-YOUR VOICE
-  ↓
-Microphone hardware
-  ↓
-Browser navigator.mediaDevices.getUserMedia()
-  ↓
-MediaStream
-  ↓
-MediaRecorder
-  ↓
-WebM/Opus Blob approximately every 100 ms
-  ↓
-Browser WebSocket
-  ↓
-Binary WebSocket frame
-  ↓
-FastAPI WebSocket
-  ↓
-Python receives bytes
-  ↓
-Deepgram WebSocket
-  ↓
-Same audio bytes (no transcoding)
-  ↓
-Deepgram Nova-3
-  ↓
-Results event
-  ↓
-Words + audio-timeline timestamps
-  ↓
-ParsedDeepgramResult
-  ↓
-SessionWordState
-  ↓
-ActiveSpeechWpm.calculate(...)
-  ↓
-WpmMeasurement
-  ↓
-FastAPI serializes measurement JSON
-  ↓
-Browser WebSocket
-  ↓
-Text frame
-  ↓
-JavaScript receives and parses the message
-  ↓
-JavaScript updates the HTML
-  ↓
-USER SEES "WPM: 132"
+```bash
+npm --prefix frontend run dev
 ```
 
-`MediaRecorder.start(100)` defines the approximate transport cadence, not the
-WPM clock. FastAPI forwards the containerized `audio/webm;codecs=opus` bytes
-without transcoding. WPM is calculated from Deepgram's word timestamps on the
-audio timeline, never from network receive time. During a pause no changed word
-timeline is emitted, so the UI retains the last valid WPM value.
+Open <http://localhost:5173>, select **Start**, allow microphone access, and
+speak. Select **Stop** to finalize the transcript and view the session summary.
+Vite proxies `/ws/live` to FastAPI at `http://localhost:8000`.
 
-At finalization, the immutable finalized-word timeline goes separately to
-`SessionSummaryCalculator`. It reuses the active-speech gap policy, calculates
-presentation duration from first word start to last word end, and emits the
-unrounded summary metrics. Non-empty final provider chunks also retain their
-formatted text and whole-word boundaries. The calculator greedily groups whole
-chunks to at least four active-speech seconds where possible, merges a short
-tail backward, and calculates each segment independently. It never averages the
-rolling live WPM values or performs sentence/NLP splitting.
+### Run the built frontend through FastAPI
 
-## Product and architecture
+```bash
+npm --prefix frontend run build
+uv run --directory backend uvicorn app.main:app
+```
 
-Start with [the architecture decisions](docs/01_ARCHITECTURE_DECISIONS.md).
-The provider decision is supported by the recorded
-[Azure live-transcription findings](docs/03_GPT_LIVE_TRANSCRIBE_FINDINGS.md),
-[Azure Whisper comparison](docs/04_GPT_REALTIME_WHISPER_FINDINGS.md), and
-[Deepgram Nova-3 findings](docs/06_DEEPGRAM_NOVA_3_FINDINGS.md).
+Open <http://localhost:8000>. The backend health check is available at
+<http://localhost:8000/health>.
 
-## Contributing
+## Configuration
 
-GitHub Issues is the source of truth for planned work, decisions attached to
-work, and progress. Start with an existing issue or create one using the
-repository's bug, feature, or implementation-task form. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the issue-to-pull-request workflow.
+The accepted defaults work without additional configuration. Optional backend
+environment variables are documented in
+[`backend/.env.example`](backend/.env.example). They include live-WPM tuning and
+secret-safe diagnostic logging. Restart the backend after changing pace
+settings.
+
+The Azure variables in that file belong only to the historical transcription
+spike; the product uses Deepgram.
+
+## Development
+
+The repository root is not itself a Python or Node project. Use
+`--directory backend` for root-level uv commands and `--prefix frontend` for
+root-level npm commands.
+
+### Verify the backend
+
+```bash
+uv run --directory backend --locked pytest
+uv run --directory backend --locked mypy app tests spikes
+uv run --directory backend --locked ruff check app tests spikes
+```
+
+### Verify the frontend
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run typecheck
+npm --prefix frontend run build
+```
+
+The automated suites do not require a live microphone or a Deepgram
+connection. Use the
+[browser acceptance procedure](docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md) when a
+change requires an end-to-end microphone check.
+
+## Project structure
+
+```text
+.
+├── backend/
+│   ├── app/          FastAPI application and pace/session services
+│   ├── spikes/       Realtime transcription experiments
+│   └── tests/        Backend unit and integration tests
+├── frontend/
+│   └── src/          React UI, browser session adapter, and tests
+├── docs/             Architecture decisions and provider evidence
+├── CONTRIBUTING.md
+└── README.md
+```
+
+## Documentation and help
+
+- [Architecture decisions](docs/01_ARCHITECTURE_DECISIONS.md)
+- [Azure live-transcription findings](docs/03_GPT_LIVE_TRANSCRIBE_FINDINGS.md)
+- [Azure Whisper comparison](docs/04_GPT_REALTIME_WHISPER_FINDINGS.md)
+- [Deepgram Nova-3 findings](docs/06_DEEPGRAM_NOVA_3_FINDINGS.md)
+- [Browser acceptance procedure](docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md)
+
+For bugs, setup questions, or feature requests, search the
+[GitHub issues](https://github.com/stuermerr/realtime-speech-speedometer/issues)
+and open an issue if one does not already cover the topic. Do not include API
+keys, transcripts, or other sensitive data in issue reports.
+
+## Maintainer and contributing
+
+Speech Speedometer is maintained by
+[@stuermerr](https://github.com/stuermerr). Contributions are welcome through
+the issue-and-pull-request workflow described in
+[`CONTRIBUTING.md`](CONTRIBUTING.md). Please discuss substantial changes in an
+issue before implementation and keep provider secrets out of commits and logs.
