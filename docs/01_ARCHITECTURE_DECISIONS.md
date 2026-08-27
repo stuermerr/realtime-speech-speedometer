@@ -24,7 +24,7 @@ Use **FastAPI** as the backend.
 - Natural async support for streaming workloads.
 - WebSocket support.
 - Keeps transcription integration, session state, and WPM logic in Python.
-- Easy to navigate and explain for maintainers.
+- Easy for maintainers to navigate and explain.
 
 ### Alternatives
 
@@ -77,7 +77,7 @@ Read provider configuration from server-side environment variables.
 
 ### Trade-offs
 
-For this MVP, `.env` + server-side API key is simple and defensible.
+For this MVP, `.env` + a server-side API key is simple and defensible.
 
 ### Rationale summary
 
@@ -874,11 +874,12 @@ See:
 
 ### Status
 
-**Accepted, temporary adapter**
+**Historical / superseded by ADR-021**
 
 ### Decision
 
-Serve a small HTML/CSS/JavaScript debug client from FastAPI at
+For the original tracer-bullet validation, serve a small HTML/CSS/JavaScript
+debug client from FastAPI at
 `http://localhost:8000/`. Do not initialize the planned React/TypeScript
 frontend during the browser-to-WPM tracer bullet.
 

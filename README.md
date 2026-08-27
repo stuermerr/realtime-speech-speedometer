@@ -22,7 +22,7 @@ is retained as a server-side fallback and tuning seam.
 │   ├── pyproject.toml
 │   └── uv.lock
 ├── frontend/         React/TypeScript Vite product UI
-├── docs/             product, architecture, and spike evidence
+├── docs/             architecture decisions and empirical evidence
 └── samples/          shared audio samples
 ```
 
@@ -104,11 +104,8 @@ microphone. A clean stopped state is shown only after Deepgram drains the final
 audio, emits Metadata, and closes normally.
 
 The browser never receives the Deepgram credential. See the
-[transport acceptance procedure](docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md) and
-[product acceptance procedure](docs/08_M5_PRODUCT_ACCEPTANCE.md), and the
-[M6 summary acceptance procedure](docs/09_M6_SESSION_SUMMARY_ACCEPTANCE.md), and
-the [segment-summary acceptance record](docs/11_SEGMENT_PACE_SUMMARY_ACCEPTANCE.md)
-for the reproducible real-browser checks.
+[transport acceptance procedure](docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md) for
+the reproducible real-browser check.
 
 Use `--directory backend` for root-level commands. `--project backend` selects
 the backend environment but does not change the command's working directory,
@@ -185,9 +182,11 @@ rolling live WPM values or performs sentence/NLP splitting.
 
 ## Product and architecture
 
-Start with [the project brief](docs/00_PROJECT_BRIEF.md), then read
-[the architecture decisions](docs/01_ARCHITECTURE_DECISIONS.md). Provider spike
-evidence is recorded in the remaining documents under `docs/`.
+Start with [the architecture decisions](docs/01_ARCHITECTURE_DECISIONS.md).
+The provider decision is supported by the recorded
+[Azure live-transcription findings](docs/03_GPT_LIVE_TRANSCRIBE_FINDINGS.md),
+[Azure Whisper comparison](docs/04_GPT_REALTIME_WHISPER_FINDINGS.md), and
+[Deepgram Nova-3 findings](docs/06_DEEPGRAM_NOVA_3_FINDINGS.md).
 
 ## Contributing
 

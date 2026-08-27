@@ -24,8 +24,15 @@ frontend/dist/
 
 # Generated spike and analysis artifacts
 backend/spikes/.artifacts/
-docs/graphify-out/cache/
 /graphify-out/
+
+# Public documentation allowlist
+/docs/*
+!/docs/01_ARCHITECTURE_DECISIONS.md
+!/docs/03_GPT_LIVE_TRANSCRIBE_FINDINGS.md
+!/docs/04_GPT_REALTIME_WHISPER_FINDINGS.md
+!/docs/06_DEEPGRAM_NOVA_3_FINDINGS.md
+!/docs/07_BROWSER_LIVE_WPM_ACCEPTANCE.md
 
 # Local scratch files
 .scratch/
@@ -37,10 +44,12 @@ docs/graphify-out/cache/
 .DS_Store
 Thumbs.db
 .idea/
+.vscode/
 *.swp
 *.swo
 
-
+# Local project context and development material
+CONTEXT.md
 AGENTS.md
 samples/
-docs/
+playground/

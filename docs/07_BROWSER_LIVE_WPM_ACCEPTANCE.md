@@ -84,10 +84,10 @@ second-session isolation, and error paths passed.**
 
 | Evidence | Recorded value |
 | --- | --- |
-| Date/time and timezone | 2026-08-25 13:10–13:12 CEST |
-| Chrome/Chromium version | Google Chrome 149.0.7827.200 (Playwright headed Chrome channel) |
-| Platform | Linux 6.17.0-35-generic x86_64 |
-| Microphone | Default input; Chrome exposed `Raptor Lake-P/U/H cAVS Digital Microphone` |
+| Test run | Recorded manual acceptance run |
+| Chrome/Chromium version | Current stable Google Chrome using a headed browser session |
+| Platform | Linux x86_64 |
+| Microphone | Default physical input; device-specific identifier omitted |
 | Actual `MediaRecorder.mimeType` | `audio/webm;codecs=opus` — pass |
 | Representative chunk sizes | 965–4,862 bytes; 4,846-byte steady chunks — pass |
 | First useful WPM latency | Pass — 6.77 seconds after session start, approximately 6.18 seconds after the first `SpeechStarted` event |

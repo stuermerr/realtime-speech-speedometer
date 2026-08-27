@@ -30,8 +30,7 @@ The earlier Azure-provider and local-VAD decisions are retained as historical ev
 The probe used the direct WebSocket protocol so the provider events could be
 observed without an SDK event model. The implementation was based on the
 official Deepgram streaming API, endpointing, utterance-end, and keep-alive
-documentation. `docs/05-deepgram-model-usage-example.py` was treated only as a
-reference as requested.
+documentation.
 
 ## Event Types Observed
 
@@ -210,8 +209,8 @@ This is the evidence supporting the provider decision.
 
 ## Browser WebM/Opus Follow-Up
 
-On 2026-08-24, the Milestone 4 local browser adapter was exercised with Google
-Chrome 149 on Linux using the machine's default physical microphone source.
+The local browser adapter was exercised with a current Google Chrome build on
+Linux using the machine's default physical microphone source.
 Chrome produced `audio/webm;codecs=opus` chunks (2,442 bytes initially and
 approximately 4,845–4,846 bytes thereafter), which FastAPI forwarded to
 Deepgram Nova-3 without transcoding or raw-audio query parameters.
